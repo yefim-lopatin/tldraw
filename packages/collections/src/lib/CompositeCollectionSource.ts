@@ -10,7 +10,7 @@ import {
 	type TLNewCollectionItem,
 	type TLNewCollectionOptions,
 } from './CollectionSource'
-import { copyCollection, copyItem } from './copyCollection'
+import { copyCollectionItemByItem, copyItem } from './copyCollection'
 
 /** @public */
 export interface CompositeCollectionSourcePart {
@@ -172,8 +172,21 @@ export class CompositeCollectionSource implements CollectionSource {
 		if (!from.source.can('deleteCollection', collectionId)) {
 			throw new CollectionPermissionError('deleteCollection', collectionId)
 		}
-		await copyCollection(this, collectionId, ownerId)
+		await copyCollectionItemByItem(this, collectionId, ownerId)
 		await from.source.deleteCollection(collectionId)
+	}
+
+	/**
+	 * Within a part whose source can copy collections itself, that source makes the copy; anywhere
+	 * else, each item is loaded and added to the new collection.
+	 */
+	async copyCollection(collectionId: TLCollectionId, ownerId: string) {
+		const from = this.getCollectionPart(collectionId)
+		const to = this.getOwnerPart(ownerId)
+		if (from === to && !from.owner && from.source.copyCollection) {
+			return from.source.copyCollection(collectionId, ownerId)
+		}
+		return copyCollectionItemByItem(this, collectionId, ownerId)
 	}
 
 	private async moveItemBetweenParts(itemId: TLCollectionItemId, toCollectionId: TLCollectionId) {

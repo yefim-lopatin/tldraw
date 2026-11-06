@@ -1,5 +1,10 @@
 import { react } from '@tldraw/state'
-import { CollectionRecordType, createShapeId, createTLSchema } from '@tldraw/tlschema'
+import {
+	CollectionRecordType,
+	createShapeId,
+	createTLSchema,
+	type TLCollectionId,
+} from '@tldraw/tlschema'
 import { describe, expect, it, vi } from 'vitest'
 import { CollectionNotFoundError, CollectionPermissionError } from './CollectionSource'
 import { CompositeCollectionSource } from './CompositeCollectionSource'
@@ -268,5 +273,38 @@ describe('CompositeCollectionSource', () => {
 			parts: [{ owner: tldraw, source: unmovable }],
 		})
 		expect(withoutMoving.moveItem).toBeUndefined()
+	})
+})
+
+describe('copyCollection', () => {
+	// A part listing its own owners, which copies collections itself, as a server-backed source does.
+	function setUpWithCopyingPart() {
+		const copies: [string, string][] = []
+		class CopyingSource extends InMemoryCollectionSource {
+			async copyCollection(collectionId: TLCollectionId, ownerId: string) {
+				copies.push([collectionId, ownerId])
+				return this.createCollection('Server copy', { ownerId })
+			}
+		}
+		const workspaces = new CopyingSource({ id: 'workspaces', owners: [personal, acme] })
+		const source = new CompositeCollectionSource({
+			parts: [{ source: workspaces }, { owner: tldraw, source: shared() }],
+		})
+		return { source, workspaces, copies }
+	}
+
+	it("lets a part's own copyCollection copy within that part", async () => {
+		const { source, copies } = setUpWithCopyingPart()
+		const kit = await source.createCollection('Kit', { ownerId: 'home' })
+		const copy = await copyCollection(source, kit.id, 'acme')
+		expect(copies).toEqual([[kit.id, 'acme']])
+		expect(copy.name).toBe('Server copy')
+	})
+
+	it('copies item by item from another part', async () => {
+		const { source, workspaces, copies } = setUpWithCopyingPart()
+		const copy = await copyCollection(source, wireframing, 'home')
+		expect(copies).toEqual([])
+		expect(workspaces.getItems(copy.id).map((item) => item.name)).toEqual(['Button', 'Card'])
 	})
 })
