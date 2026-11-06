@@ -1,8 +1,7 @@
-import 'fake-indexeddb/auto'
-import type { CollectionSource } from '@tldraw/collections'
 import {
 	AssetRecordType,
 	createShapeId,
+	createTLSchema,
 	createTLStore,
 	defaultBindingUtils,
 	defaultShapeUtils,
@@ -11,68 +10,36 @@ import {
 } from 'tldraw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fileSchemaRecords } from '../../../utils/fileSchemaRecords'
-import type { TldrawApp } from '../../app/TldrawApp'
 import { TldrawAppCollectionsSource } from './collectionsSource'
 import { getEditorCollections } from './editorCollections'
+import { createFakeCollectionsBackend } from './fakeCollectionsBackend'
 
-let lastUserId = 0
-const cleanups: (() => void)[] = []
+let editors: Editor[] = []
 
 afterEach(() => {
-	for (const cleanup of cleanups.splice(0)) cleanup()
+	for (const editor of editors) editor.dispose()
+	editors = []
+	vi.unstubAllGlobals()
 })
 
-function createEditor() {
+function setUp() {
+	const backend = createFakeCollectionsBackend({ userId: 'home' })
+	vi.stubGlobal('fetch', backend.fetch)
+	const { app } = backend
+	const collections = new TldrawAppCollectionsSource(app, backend.getToken)
 	const editor = new Editor({
-		store: createTLStore({
-			records: fileSchemaRecords,
-			shapeUtils: defaultShapeUtils,
-			bindingUtils: defaultBindingUtils,
-		}),
+		store: createTLStore({ schema: createTLSchema({ records: fileSchemaRecords }) }),
 		shapeUtils: defaultShapeUtils,
 		bindingUtils: defaultBindingUtils,
 		tools: [],
 		getContainer: () => document.body,
 	})
-	cleanups.push(() => editor.dispose())
-	return editor
-}
-
-// The home workspace's id is the user's id, as on tldraw.com.
-function createApp(userId: string) {
-	const names: Record<string, string> = { [userId]: 'Home', acme: 'Acme' }
-	return {
-		userId,
-		getHomeWorkspaceId: () => userId,
-		getWorkspaceMemberships: () =>
-			[userId, 'acme'].map((groupId) => ({ groupId, group: { name: names[groupId] } })),
-		msg: (message: { defaultMessage: string }) => message.defaultMessage,
-	} as unknown as TldrawApp
-}
-
-function createUserCollections(app: TldrawApp) {
-	const userCollections = new TldrawAppCollectionsSource(app)
-	cleanups.push(() => userCollections.dispose())
-	return userCollections
-}
-
-function setUp() {
-	const userId = `editor-collections-user-${++lastUserId}`
-	const app = createApp(userId)
-	const userCollections = createUserCollections(app)
-	const editor = createEditor()
-	const source = getEditorCollections(app, userCollections, editor, 'file-a')
-	return { app, userId, userCollections, editor, source }
+	editors.push(editor)
+	return { editor, source: getEditorCollections(app, collections, editor, 'file-a') }
 }
 
 const ofType = (editor: Editor, typeName: string) =>
 	editor.store.allRecords().filter((r) => r.typeName === (typeName as TLRecord['typeName']))
-
-const namesOf = (source: CollectionSource, ownerId: string) =>
-	source
-		.getCollections()
-		.filter((c) => c.ownerId === ownerId)
-		.map((c) => c.name)
 
 function addImage(editor: Editor) {
 	const assetId = AssetRecordType.createId('photo')
@@ -97,27 +64,23 @@ function addImage(editor: Editor) {
 }
 
 describe('getEditorCollections', () => {
-	it("lists the board first, then the user's workspaces", () => {
-		const { userId, source } = setUp()
+	it("lists the board first and keeps collections made there in the file's document", async () => {
+		const { editor, source } = setUp()
 		expect(source.getCollectionOwners?.()).toEqual([
 			{ id: 'file-a', name: 'This board' },
-			{ id: userId, name: 'Private to you' },
+			{ id: 'home', name: 'Private to you' },
 			{ id: 'acme', name: 'Acme' },
 		])
-		expect(namesOf(source, userId)).toEqual(['Wireframes', 'Icons'])
+		const collection = await source.createCollection('Board kit', { ownerId: 'file-a' })
+		expect(collection.ownerId).toBe('file-a')
+		expect(ofType(editor, 'collection')).toMatchObject([{ id: collection.id, name: 'Board kit' }])
 	})
 
-	it('is made once per editor and file', () => {
-		const { app, userCollections, editor, source } = setUp()
-		expect(getEditorCollections(app, userCollections, editor, 'file-a')).toBe(source)
-		expect(getEditorCollections(app, userCollections, editor, 'file-b')).not.toBe(source)
-	})
-
-	it("creates new collections in the user's home workspace", async () => {
-		const { userId, editor, source } = setUp()
-		expect(source.getDefaultOwnerId?.()).toBe(userId)
+	it('creates new collections in the home workspace by default', async () => {
+		const { editor, source } = setUp()
+		expect(source.getDefaultOwnerId?.()).toBe('home')
 		const collection = await source.createCollection('Team kit')
-		expect(collection.ownerId).toBe(userId)
+		expect(collection.ownerId).toBe('home')
 		expect(ofType(editor, 'collection')).toEqual([])
 	})
 
@@ -128,47 +91,35 @@ describe('getEditorCollections', () => {
 		expect(ofType(editor, 'collection')).toEqual([])
 	})
 
-	it("keeps a collection created for the board in the file's document", async () => {
+	it('creates new collections in the home workspace while the board is read-only', async () => {
 		const { editor, source } = setUp()
-		const collection = await source.createCollection('Board kit', { ownerId: 'file-a' })
-		expect(collection.ownerId).toBe('file-a')
-		expect(ofType(editor, 'collection')).toMatchObject([{ id: collection.id, name: 'Board kit' }])
+		editor.updateInstanceState({ isReadonly: true })
+		const collection = await source.createCollection('Team kit')
+		expect(collection.ownerId).toBe('home')
+		expect(ofType(editor, 'collection')).toEqual([])
 	})
 
-	it("moves a board collection to the user's own and back, with its image", async () => {
-		const { userId, editor, source } = setUp()
+	it('moves a board collection to a workspace and back, with its image', async () => {
+		const { editor, source } = setUp()
 		const { id, assetId } = addImage(editor)
 		const collection = await source.createCollection('Photos', { ownerId: 'file-a' })
 		await source.addItem(collection.id, {
 			content: { formatVersion: 1, content: editor.getContentFromCurrentPage([id])! },
 		})
 
-		await source.moveCollection!(collection.id, userId)
+		await source.moveCollection!(collection.id, 'home')
 		expect(ofType(editor, 'collection')).toEqual([])
-		const moved = source.getCollections().find((c) => c.name === 'Photos')!
-		expect(moved.ownerId).toBe(userId)
-		const [userItem] = source.getItems(moved.id)
-		const userContent = await source.getItemContent(userItem.id)
-		expect(userContent.content.assets.map((a) => a.id)).toEqual([assetId])
+		const [inHome] = source.getCollections()
+		expect(inHome.ownerId).toBe('home')
+		const [homeItem] = source.getItems(inHome.id)
+		expect((await source.getItemContent(homeItem.id)).content.assets.map((a) => a.id)).toEqual([
+			assetId,
+		])
 
 		editor.store.remove([assetId])
-		await source.moveCollection!(moved.id, 'file-a')
-		expect(namesOf(source, 'file-a')).toEqual(['Photos'])
+		await source.moveCollection!(inHome.id, 'file-a')
+		const [onBoard] = source.getCollections()
+		expect(onBoard.ownerId).toBe('file-a')
 		expect(ofType(editor, 'asset').map((a) => a.id)).toEqual([assetId])
-	})
-
-	it("keeps a board collection out of the user's own collections across a reload", async () => {
-		const { app, source } = setUp()
-		await source.createCollection('Board kit', { ownerId: 'file-a' })
-		await source.createCollection('Team kit')
-
-		const reloaded = createUserCollections(app)
-		await vi.waitFor(() =>
-			expect(reloaded.getCollections().map((c) => c.name)).toEqual([
-				'Wireframes',
-				'Icons',
-				'Team kit',
-			])
-		)
 	})
 })

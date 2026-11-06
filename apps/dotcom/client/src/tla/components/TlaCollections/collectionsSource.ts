@@ -1,9 +1,10 @@
 import {
+	CollectionItemRecordType,
+	CollectionNotFoundError,
+	CollectionPermissionError,
 	CollectionRecordType,
-	InMemoryCollectionSource,
-	mapThumbnail,
+	getThumbnailForColorMode,
 	type CollectionSource,
-	type InMemoryCollectionSourceOptions,
 	type TLCollection,
 	type TLCollectionAction,
 	type TLCollectionId,
@@ -12,63 +13,50 @@ import {
 	type TLCollectionItemId,
 	type TLCollectionOwner,
 	type TLCollectionTarget,
-	type TLCollectionThumbnail,
 	type TLNewCollectionItem,
 	type TLNewCollectionOptions,
 } from '@tldraw/collections'
-import { openDB, type IDBPDatabase } from 'idb'
-import { atom, computed, defineMessages, type Atom } from 'tldraw'
+import { can, type TlaCollection, type TlaCollectionItemThumbnail } from '@tldraw/dotcom-shared'
+import { computed, defineMessages, fetch, uniqueId } from 'tldraw'
 import type { TldrawApp } from '../../app/TldrawApp'
 
 const messages = defineMessages({
 	privateToYou: { defaultMessage: 'Private to you' },
 })
 
-// Bytes rather than a Blob, which not every IndexedDB stores.
-interface StoredImage {
+interface MutationResult {
 	type: string
-	data: ArrayBuffer
+	error?: unknown
 }
 
-interface StoredItem {
-	item: TLCollectionItem
-	content: TLCollectionItemContent
-	thumbnail?: TLCollectionThumbnail<StoredImage>
-}
+// A row's id is the record id without its type prefix.
+const rowId = (id: TLCollectionId | TLCollectionItemId) => id.slice(id.indexOf(':') + 1)
 
-async function toStoredImage(blob: Blob): Promise<StoredImage> {
-	return { type: blob.type, data: await blob.arrayBuffer() }
-}
-
-// The in-memory source checks owners against its own list, so it is given this source's.
-class OwnedInMemoryCollectionSource extends InMemoryCollectionSource {
-	constructor(
-		private readonly listOwners: () => TLCollectionOwner[],
-		options: InMemoryCollectionSourceOptions
-	) {
-		super(options)
-	}
-
-	override getCollectionOwners() {
-		return this.listOwners()
-	}
-}
+const toCollection = (row: TlaCollection): TLCollection =>
+	CollectionRecordType.create({
+		id: CollectionRecordType.createId(row.id),
+		name: row.name,
+		ownerId: row.owningGroupId,
+		meta: row.meta ?? {},
+	})
 
 /**
- * Until tldraw.com has a real source, collections are kept in this browser, per user: they survive
- * a reload but don't follow anyone to another browser or device. Like files, each belongs to one of
- * the user's workspaces, their home workspace first, and new ones go to the home workspace.
+ * Workspace collections, kept in tldraw.com's database and synced through Zero: those of every
+ * workspace the user is a member of, the home workspace's being private to them. A board's own
+ * collections are kept in its document instead (see editorCollections).
  *
- * An in-memory source, saved to IndexedDB after each change and loaded back on start. Each
- * collection is saved with its owner. Until the load finishes it shows the sample collections, and
- * writes wait for it.
+ * Collections and item rows come from the app's collections query and change through mutators.
+ * An item's content is stored by the sync worker, which also adds items and copies collections,
+ * and is fetched with the user's token. Its thumbnails are public uploads whose URLs are on its
+ * row, so they load as ordinary images.
  */
 export class TldrawAppCollectionsSource implements CollectionSource {
-	readonly id = 'dotcom-browser'
+	readonly id = 'dotcom-workspaces'
 
 	private readonly owners$ = computed('collection owners', (): TLCollectionOwner[] => {
 		const homeId = this.app.getHomeWorkspaceId()
 		const memberships = this.app.getWorkspaceMemberships()
+		// The collections UI names the home workspace for who sees it, not by its name.
 		return [
 			{ id: homeId, name: this.app.msg(messages.privateToYou) },
 			...memberships.flatMap((m) =>
@@ -77,68 +65,53 @@ export class TldrawAppCollectionsSource implements CollectionSource {
 		]
 	})
 
-	// A collection whose workspace the user has left stays saved, but isn't listed.
-	private readonly collections$ = computed('visible collections', () => {
-		const ownerIds = new Set(this.getCollectionOwners().map((owner) => owner.id))
-		return this.inner
-			.get()
-			.getCollections()
-			.filter((collection) => collection.ownerId === undefined || ownerIds.has(collection.ownerId))
+	private readonly collections$ = computed('workspace collections', () =>
+		this.app.getCollectionRows().map(toCollection)
+	)
+
+	private readonly items$ = computed('workspace collection items', () => {
+		const byCollection = new Map<string, TLCollectionItem[]>()
+		for (const row of this.app.getCollectionRows()) {
+			byCollection.set(
+				row.id,
+				row.items.map((item) =>
+					CollectionItemRecordType.create({
+						id: CollectionItemRecordType.createId(item.id),
+						collectionId: CollectionRecordType.createId(row.id),
+						...(item.name ? { name: item.name } : {}),
+						...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
+						createdAt: item.createdAt,
+					})
+				)
+			)
+		}
+		return byCollection
 	})
 
-	private readonly inner: Atom<InMemoryCollectionSource>
-	private readonly db: Promise<IDBPDatabase>
-	private readonly ready: Promise<void>
-	// The in-memory source only releases URLs it created, so these are released here.
-	private readonly loadedThumbnailUrls: string[] = []
-
-	constructor(private readonly app: TldrawApp) {
-		const homeId = app.getHomeWorkspaceId()
-		this.inner = atom(
-			'collections source',
-			this.createInner({
-				collections: [
-					CollectionRecordType.create({
-						id: CollectionRecordType.createId('sample-wireframes'),
-						name: 'Wireframes',
-						ownerId: homeId,
-					}),
-					CollectionRecordType.create({
-						id: CollectionRecordType.createId('sample-icons'),
-						name: 'Icons',
-						ownerId: homeId,
-					}),
-				],
-				items: [],
-				contents: {},
-			})
-		)
-		this.db = openDB(`tldraw-collections-${app.userId}`, 1, {
-			upgrade(db) {
-				db.createObjectStore('state')
-				db.createObjectStore('items')
-			},
-		})
-		this.ready = this.load().catch((error) => {
-			console.error('[collections] failed to load saved collections', error)
-		})
-	}
+	constructor(
+		private readonly app: TldrawApp,
+		private readonly getToken: () => Promise<string | undefined>
+	) {}
 
 	getCollections() {
 		return this.collections$.get()
 	}
 
 	getItems(collectionId: TLCollectionId) {
-		return this.inner.get().getItems(collectionId)
+		return this.items$.get().get(rowId(collectionId)) ?? []
 	}
 
-	async getItemContent(itemId: TLCollectionItemId) {
-		await this.ready
-		return this.inner.get().getItemContent(itemId)
+	async getItemContent(itemId: TLCollectionItemId): Promise<TLCollectionItemContent> {
+		const response = await this.request(`/api/app/collection-items/${rowId(itemId)}/content`)
+		if (response.status === 404) throw new CollectionNotFoundError(itemId)
+		if (!response.ok) throw new Error(`Couldn't load the item: ${response.status}`)
+		return (await response.json()) as TLCollectionItemContent
 	}
 
-	can(action: TLCollectionAction, target?: TLCollectionTarget) {
-		return this.inner.get().can(action, target)
+	can(_action: TLCollectionAction, target?: TLCollectionTarget) {
+		// Every member of a workspace can manage its collections, so the action doesn't matter.
+		const ownerId = this.getTargetOwnerId(target)
+		return ownerId !== undefined && this.canManageIn(ownerId)
 	}
 
 	getCollectionOwners() {
@@ -150,113 +123,122 @@ export class TldrawAppCollectionsSource implements CollectionSource {
 	}
 
 	async createCollection(name: string, options: TLNewCollectionOptions = {}) {
-		await this.ready
 		const ownerId = options.ownerId ?? this.getDefaultOwnerId()
-		const collection = await this.inner.get().createCollection(name, { ...options, ownerId })
-		await this.save()
-		return collection
-	}
-
-	async renameCollection(collectionId: TLCollectionId, name: string) {
-		await this.ready
-		await this.inner.get().renameCollection(collectionId, name)
-		await this.save()
-	}
-
-	async deleteCollection(collectionId: TLCollectionId) {
-		await this.ready
-		const itemIds = this.getItems(collectionId).map((item) => item.id)
-		await this.inner.get().deleteCollection(collectionId)
-		await this.save((db) => Promise.all(itemIds.map((itemId) => db.delete('items', itemId))))
-	}
-
-	async moveCollection(collectionId: TLCollectionId, ownerId: string) {
-		await this.ready
-		await this.inner.get().moveCollection(collectionId, ownerId)
-		await this.save()
-	}
-
-	async addItem(collectionId: TLCollectionId, newItem: TLNewCollectionItem) {
-		await this.ready
-		const item = await this.inner.get().addItem(collectionId, newItem)
-		// The object URL dies with the page, so the thumbnail's bytes are saved instead and turned
-		// back into a URL on load.
-		const { thumbnail: _, ...itemToStore } = item
-		const { thumbnail } = newItem
-		const stored: StoredItem = {
-			item: itemToStore,
-			content: newItem.content,
-			thumbnail:
-				thumbnail &&
-				(thumbnail instanceof Blob
-					? await toStoredImage(thumbnail)
-					: {
-							light: await toStoredImage(thumbnail.light),
-							dark: await toStoredImage(thumbnail.dark),
-						}),
-		}
-		await this.save((db) => db.put('items', stored, item.id))
-		return item
-	}
-
-	async renameItem(itemId: TLCollectionItemId, name: string) {
-		await this.ready
-		await this.inner.get().renameItem(itemId, name)
-		await this.save(async (db) => {
-			const stored: StoredItem | undefined = await db.get('items', itemId)
-			if (stored) await db.put('items', { ...stored, item: { ...stored.item, name } }, itemId)
+		if (!this.canManageIn(ownerId)) throw new CollectionPermissionError('createCollection')
+		const id = uniqueId()
+		const meta = options.meta ?? {}
+		await this.check(
+			this.app.z.mutate.collection.create({ id, name, owningGroupId: ownerId, meta }).server
+		)
+		return CollectionRecordType.create({
+			id: CollectionRecordType.createId(id),
+			name: name.trim(),
+			ownerId,
+			meta,
 		})
 	}
 
+	async renameCollection(collectionId: TLCollectionId, name: string) {
+		await this.check(this.app.z.mutate.collection.rename({ id: rowId(collectionId), name }).server)
+	}
+
+	async deleteCollection(collectionId: TLCollectionId) {
+		await this.check(this.app.z.mutate.collection.delete({ id: rowId(collectionId) }).server)
+	}
+
+	async moveCollection(collectionId: TLCollectionId, ownerId: string) {
+		await this.check(
+			this.app.z.mutate.collection.move({ id: rowId(collectionId), owningGroupId: ownerId }).server
+		)
+	}
+
+	async copyCollection(collectionId: TLCollectionId, ownerId: string): Promise<TLCollection> {
+		const collection = this.findRow(collectionId)
+		if (!collection) throw new CollectionNotFoundError(collectionId)
+		const response = await this.request(`/api/app/collections/${rowId(collectionId)}/copy`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ owningGroupId: ownerId }),
+		})
+		if (!response.ok) throw new Error(`Couldn't copy the collection: ${response.status}`)
+		const { id } = (await response.json()) as { id: string }
+		return toCollection({ ...collection, id, owningGroupId: ownerId })
+	}
+
+	async addItem(collectionId: TLCollectionId, newItem: TLNewCollectionItem) {
+		if (!this.can('addItem', collectionId)) {
+			throw new CollectionPermissionError('addItem', collectionId)
+		}
+		const form = new FormData()
+		form.set('content', JSON.stringify(newItem.content))
+		if (newItem.thumbnail) {
+			form.set('thumbnail', getThumbnailForColorMode(newItem.thumbnail, 'light'))
+			if (!(newItem.thumbnail instanceof Blob)) form.set('darkThumbnail', newItem.thumbnail.dark)
+		}
+		if (newItem.name) form.set('name', newItem.name)
+		const response = await this.request(`/api/app/collections/${rowId(collectionId)}/items`, {
+			method: 'POST',
+			body: form,
+		})
+		if (!response.ok) throw new Error(`Couldn't add the item: ${response.status}`)
+		const { id, createdAt, thumbnail } = (await response.json()) as {
+			id: string
+			createdAt: number
+			thumbnail: TlaCollectionItemThumbnail | null
+		}
+		return CollectionItemRecordType.create({
+			id: CollectionItemRecordType.createId(id),
+			collectionId,
+			...(newItem.name ? { name: newItem.name } : {}),
+			...(thumbnail ? { thumbnail } : {}),
+			createdAt,
+		})
+	}
+
+	async renameItem(itemId: TLCollectionItemId, name: string) {
+		await this.check(this.app.z.mutate.collection_item.rename({ id: rowId(itemId), name }).server)
+	}
+
 	async deleteItem(itemId: TLCollectionItemId) {
-		await this.ready
-		await this.inner.get().deleteItem(itemId)
-		await this.save((db) => db.delete('items', itemId))
+		await this.check(this.app.z.mutate.collection_item.delete({ id: rowId(itemId) }).server)
 	}
 
-	dispose() {
-		this.inner.get().dispose()
-		for (const url of this.loadedThumbnailUrls) URL.revokeObjectURL(url)
-		this.db.then((db) => db.close()).catch(() => {})
+	async moveItem(itemId: TLCollectionItemId, toCollectionId: TLCollectionId) {
+		await this.check(
+			this.app.z.mutate.collection_item.move({
+				id: rowId(itemId),
+				collectionId: rowId(toCollectionId),
+			}).server
+		)
 	}
 
-	private createInner(initial: InMemoryCollectionSourceOptions['initial']) {
-		return new OwnedInMemoryCollectionSource(() => this.getCollectionOwners(), { initial })
+	private getTargetOwnerId(target?: TLCollectionTarget) {
+		if (target === undefined) return this.getDefaultOwnerId()
+		if (typeof target === 'object') return target.ownerId
+		return this.findRow(target)?.owningGroupId
 	}
 
-	private async load() {
-		const db = await this.db
-		const collections: TLCollection[] | undefined = await db.get('state', 'collections')
-		// Nothing saved yet: keep the samples.
-		if (!collections) return
-		const stored: StoredItem[] = await db.getAll('items')
-		const toUrl = (bytes: StoredImage) => {
-			const url = URL.createObjectURL(new Blob([bytes.data], { type: bytes.type }))
-			this.loadedThumbnailUrls.push(url)
-			return url
-		}
-		const items = stored.map(({ item, thumbnail }) => ({
-			...item,
-			...(thumbnail && { thumbnail: mapThumbnail(thumbnail, toUrl) }),
-		}))
-		const contents = Object.fromEntries(stored.map(({ item, content }) => [item.id, content]))
-		const previous = this.inner.get()
-		this.inner.set(this.createInner({ collections, items, contents }))
-		previous.dispose()
+	private findRow(collectionId: TLCollectionId) {
+		const id = rowId(collectionId)
+		return this.app.getCollectionRows().find((row) => row.id === id)
 	}
 
-	// The whole collection list, including those of workspaces the user has left, is saved with
-	// every change, so an item added to a sample collection before anything else was saved still
-	// has its collection on the next load. The change has
-	// already happened in memory, so a failed save keeps it for this session instead of reporting
-	// an error for something that worked.
-	private async save(write?: (db: IDBPDatabase) => Promise<unknown>) {
-		try {
-			const db = await this.db
-			await write?.(db)
-			await db.put('state', this.inner.get().getCollections(), 'collections')
-		} catch (error) {
-			console.error('[collections] failed to save', error)
-		}
+	private canManageIn(workspaceId: string) {
+		return can(this.app.getWorkspaceMembership(workspaceId)?.role, 'manageCollections')
+	}
+
+	// The local store has the change at once; waiting for the server is what reports a rejection,
+	// and lets items be added in the worker to a collection that was just created. Zero's mutation
+	// promises resolve with an error result rather than rejecting.
+	private async check(result: Promise<MutationResult>) {
+		const { type, error } = await result
+		if (type === 'error') throw new Error('The change was rejected', { cause: error })
+	}
+
+	private async request(path: string, init: RequestInit = {}) {
+		const token = await this.getToken()
+		const headers = new Headers(init.headers)
+		if (token) headers.set('Authorization', `Bearer ${token}`)
+		return fetch(path, { ...init, headers })
 	}
 }
