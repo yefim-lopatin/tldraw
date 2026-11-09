@@ -1,4 +1,8 @@
-import { collectionsPanelOpen, toggleCollectionsPanel } from '@tldraw/collections'
+import {
+	collectionsPanelOpen,
+	toggleCollectionsPanel,
+	useCollectionsEnabled,
+} from '@tldraw/collections'
 import {
 	commentsSidebarOpen,
 	toggleCommentsSidebar,
@@ -169,11 +173,12 @@ function CommentsSidebarButton() {
 function CollectionsPanelButton() {
 	const msg = useTranslation()
 	const editor = useEditor()
+	const collectionsEnabled = useCollectionsEnabled()
 	const hasCollections = !!useMaybeApp()?.collections
 	const open = useValue('collections panel open', () => collectionsPanelOpen.get(editor), [editor])
 	const label = msg(collectionsMessages.collections)
 
-	if (!hasCollections) return null
+	if (!collectionsEnabled || !hasCollections) return null
 
 	return (
 		<TldrawUiButton
