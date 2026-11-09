@@ -1,6 +1,7 @@
-import { can, isRole, TlaCollectionItem } from '@tldraw/dotcom-shared'
+import { can, isRole, TlaCollectionItem, TlaCollectionItemAsset } from '@tldraw/dotcom-shared'
 import { uniqueId } from '@tldraw/utils'
 import { IRequest } from 'itty-router'
+import { copyItemAssets, StoredItemContent } from '../../collectionItemAssets'
 import {
 	getCollectionAccess,
 	getCollectionItemContentKey,
@@ -21,7 +22,7 @@ export interface CopyCollectionResponseBody {
 
 /**
  * Copies a collection, with its items, into a workspace: new rows, and copies of each item's
- * content and thumbnail made here rather than through the client. The caller must be a member of the
+ * content, thumbnail and the uploads it owns, made here rather than through the client. The caller must be a member of the
  * collection's workspace and able to manage collections in the destination. An item whose content
  * is missing is left out.
  */
@@ -55,6 +56,7 @@ export async function copyCollection(request: IRequest, env: Environment) {
 		const now = Date.now()
 		const copied: CopiedObjects = { keys: [], uploads: [] }
 		const rows: TlaCollectionItem[] = []
+		const owned: TlaCollectionItemAsset[] = []
 		try {
 			for (const item of items) {
 				const newItemId = uniqueId()
@@ -69,6 +71,9 @@ export async function copyCollection(request: IRequest, env: Environment) {
 					createdAt: now,
 					updatedAt: now,
 				})
+				for (const objectName of copy.ownedObjectNames) {
+					owned.push({ itemId: newItemId, objectName })
+				}
 			}
 			await db.transaction().execute(async (tx) => {
 				await tx
@@ -84,6 +89,7 @@ export async function copyCollection(request: IRequest, env: Environment) {
 					})
 					.execute()
 				if (rows.length > 0) await tx.insertInto('collection_item').values(rows).execute()
+				if (owned.length > 0) await tx.insertInto('collection_item_asset').values(owned).execute()
 			})
 		} catch (error) {
 			if (copied.keys.length > 0) await env.ROOMS.delete(copied.keys)
@@ -102,8 +108,8 @@ interface CopiedObjects {
 }
 
 /**
- * Copies an item's stored content to a new id, and its thumbnail to new public uploads; null when
- * its content is missing.
+ * Copies an item's stored content to a new id, the copy owning its own copies of the uploads its
+ * content refers to, and its thumbnail to new public uploads; null when its content is missing.
  */
 async function copyItemObjects(
 	env: Environment,
@@ -111,13 +117,19 @@ async function copyItemObjects(
 	newId: string,
 	copied: CopiedObjects
 ) {
-	const content = await env.ROOMS.get(getCollectionItemContentKey(item.id))
-	if (!content) return null
+	const stored = await env.ROOMS.get(getCollectionItemContentKey(item.id))
+	if (!stored) return null
+	const { content, ownedObjectNames } = await copyItemAssets(
+		env,
+		(await stored.json()) as StoredItemContent,
+		newId
+	)
+	copied.uploads.push(...ownedObjectNames)
 	const contentKey = getCollectionItemContentKey(newId)
-	await env.ROOMS.put(contentKey, await content.arrayBuffer(), {
+	await env.ROOMS.put(contentKey, JSON.stringify(content), {
 		httpMetadata: { contentType: 'application/json' },
 	})
 	copied.keys.push(contentKey)
 	const thumbnail = await copyThumbnail(env, item.thumbnail, copied.uploads)
-	return { thumbnail }
+	return { thumbnail, ownedObjectNames }
 }

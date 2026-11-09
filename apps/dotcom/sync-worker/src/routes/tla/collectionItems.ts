@@ -6,6 +6,7 @@ import {
 } from '@tldraw/dotcom-shared'
 import { uniqueId } from '@tldraw/utils'
 import { IRequest } from 'itty-router'
+import { copyItemAssets, StoredItemContent } from '../../collectionItemAssets'
 import {
 	getCollectionAccess,
 	getCollectionItemAccess,
@@ -50,17 +51,19 @@ function readThumbnail(value: FormDataEntryValue | null): File | null | Response
 	return value
 }
 
-function isItemContent(value: unknown) {
+function isItemContent(value: unknown): value is StoredItemContent {
 	if (!value || typeof value !== 'object') return false
-	const { formatVersion, content } = value as { formatVersion?: unknown; content?: unknown }
-	return formatVersion === 1 && !!content && typeof content === 'object'
+	const { formatVersion, content } = value as { formatVersion?: unknown; content?: any }
+	if (formatVersion !== 1 || !content || typeof content !== 'object') return false
+	return content.assets === undefined || Array.isArray(content.assets)
 }
 
 /**
- * Adds an item to a collection: stores its content (a TLCollectionItemContent as JSON) privately
- * and its optional thumbnails as public uploads, then inserts its row, with the thumbnails' URLs,
- * which reaches clients through Zero. The worker picks the item's id, so a request can't name an
- * existing item and overwrite its content.
+ * Adds an item to a collection: gives it its own copies of the uploads its content refers to (see
+ * copyItemAssets), stores its content (a TLCollectionItemContent as JSON) privately and its
+ * optional thumbnails as public uploads, then inserts its row, with the thumbnails' URLs, which
+ * reaches clients through Zero, and records the copies it owns. The worker picks the item's id, so
+ * a request can't name an existing item and overwrite its content.
  *
  * Form fields: `content`, `thumbnail` (optional, PNG, WebP or JPEG), `darkThumbnail` (optional, and
  * only with `thumbnail`, which is then the light one of the pair) and `name` (optional).
@@ -104,25 +107,36 @@ export async function addCollectionItem(request: IRequest, env: Environment) {
 		const id = uniqueId()
 		const contentKey = getCollectionItemContentKey(id)
 		const uploads: string[] = []
+		let ownedObjectNames: string[] = []
 		const now = Date.now()
 		try {
-			await env.ROOMS.put(contentKey, contentText, {
+			const owned = await copyItemAssets(env, content, id)
+			ownedObjectNames = owned.ownedObjectNames
+			await env.ROOMS.put(contentKey, JSON.stringify(owned.content), {
 				httpMetadata: { contentType: 'application/json' },
 			})
 			const thumbnail =
 				thumbnailFile && (await putThumbnail(env, thumbnailFile, darkThumbnailFile, uploads))
-			await db
-				.insertInto('collection_item')
-				.values({
-					id,
-					collectionId,
-					name,
-					thumbnail: toThumbnailColumn(thumbnail),
-					createdBy: auth.userId,
-					createdAt: now,
-					updatedAt: now,
-				})
-				.execute()
+			await db.transaction().execute(async (tx) => {
+				await tx
+					.insertInto('collection_item')
+					.values({
+						id,
+						collectionId,
+						name,
+						thumbnail: toThumbnailColumn(thumbnail),
+						createdBy: auth.userId,
+						createdAt: now,
+						updatedAt: now,
+					})
+					.execute()
+				if (ownedObjectNames.length > 0) {
+					await tx
+						.insertInto('collection_item_asset')
+						.values(ownedObjectNames.map((objectName) => ({ itemId: id, objectName })))
+						.execute()
+				}
+			})
 			return Response.json({
 				id,
 				createdAt: now,
@@ -131,7 +145,8 @@ export async function addCollectionItem(request: IRequest, env: Environment) {
 		} catch (error) {
 			// e.g. the collection was deleted meanwhile; nothing refers to the objects yet
 			await env.ROOMS.delete(contentKey)
-			if (uploads.length > 0) await env.UPLOADS.delete(uploads)
+			const stored = [...uploads, ...ownedObjectNames]
+			if (stored.length > 0) await env.UPLOADS.delete(stored)
 			throw error
 		}
 	} finally {
