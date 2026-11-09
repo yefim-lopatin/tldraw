@@ -6,6 +6,7 @@ import {
 	useTranslation,
 	useValue,
 } from 'tldraw'
+import { useCollectionsEnabled } from './license'
 import { collectionsPanelOpen, toggleCollectionsPanel } from './state'
 
 const messages = defineMessages({
@@ -20,8 +21,11 @@ const messages = defineMessages({
 export function CollectionsPanelButton() {
 	const editor = useEditor()
 	const msg = useTranslation()
+	const collectionsEnabled = useCollectionsEnabled()
 	const open = useValue('collections panel open', () => collectionsPanelOpen.get(editor), [editor])
 	const label = msg(messages.title)
+
+	if (!collectionsEnabled) return null
 
 	return (
 		<TldrawUiButton

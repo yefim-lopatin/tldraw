@@ -10,6 +10,7 @@ import {
 import type { CollectionSource } from '../lib/CollectionSource'
 import { InContextMenu, MenuItem } from '../ui/menu-items'
 import { groupCollectionList, useCollectionGrouping } from './collection-groups'
+import { useCollectionsEnabled } from './license'
 import { canCreateNewCollection } from './new-collection'
 import { sortByRecentlyAddedTo } from './recent-collections'
 import type { PrepareItemContent } from './save-shapes'
@@ -40,6 +41,7 @@ export function AddToCollectionMenuItem({
 }: AddToCollectionMenuItemProps) {
 	const editor = useEditor()
 	const msg = useTranslation()
+	const collectionsEnabled = useCollectionsEnabled()
 	const hasSelection = useValue('has selection', () => editor.getSelectedShapeIds().length > 0, [
 		editor,
 	])
@@ -58,7 +60,7 @@ export function AddToCollectionMenuItem({
 	])
 	const { saveSelection, saveToNewCollection } = useSaveSelection(source, prepareItemContent)
 
-	if (!hasSelection || (collections.length === 0 && !canCreate)) return null
+	if (!collectionsEnabled || !hasSelection || (collections.length === 0 && !canCreate)) return null
 
 	return (
 		<TldrawUiMenuGroup id="collections">

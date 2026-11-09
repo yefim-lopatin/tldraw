@@ -9,6 +9,7 @@ import {
 	useValue,
 	type TLUiQuickActionsProps,
 } from 'tldraw'
+import { useCollectionsEnabled } from './license'
 import { collectionsPanelOpen, toggleCollectionsPanel } from './state'
 
 const messages = defineMessages({
@@ -38,7 +39,10 @@ export function CollectionsQuickActions({ children }: TLUiQuickActionsProps) {
 function CollectionsToolbarButton() {
 	const editor = useEditor()
 	const msg = useTranslation()
+	const collectionsEnabled = useCollectionsEnabled()
 	const open = useValue('collections panel open', () => collectionsPanelOpen.get(editor), [editor])
+
+	if (!collectionsEnabled) return null
 
 	return (
 		<TldrawUiToolbarButton

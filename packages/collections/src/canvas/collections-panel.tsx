@@ -13,6 +13,7 @@ import { CollectionGroupSection } from './collection-group-section'
 import { groupCollectionList, useCollectionGrouping } from './collection-groups'
 import { CollectionSection } from './collection-section'
 import { CollectionsPanelHeader } from './collections-panel-header'
+import { useCollectionsEnabled } from './license'
 import { NoCollections } from './no-collections'
 import { placeCollectionItem } from './place-item'
 import type { PrepareItemContent } from './save-shapes'
@@ -58,6 +59,7 @@ export function CollectionsPanel({
 	const editor = useEditor()
 	const msg = useTranslation()
 	const { addToast } = useToasts()
+	const collectionsEnabled = useCollectionsEnabled()
 	const open = useValue('collections panel open', () => collectionsPanelOpen.get(editor), [editor])
 	const collections = useValue('collections', () => source.getCollections(), [source])
 	const grouping = useCollectionGrouping(source)
@@ -75,7 +77,7 @@ export function CollectionsPanel({
 	)
 	const getItemProps = useItemDrag(source, placeItem)
 
-	if (!open) return null
+	if (!collectionsEnabled || !open) return null
 
 	return (
 		<EditorPortal>

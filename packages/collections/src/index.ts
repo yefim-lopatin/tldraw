@@ -5,6 +5,7 @@ export {
 export { CollectionsPanel, type CollectionsPanelProps } from './canvas/collections-panel'
 export { CollectionsPanelButton } from './canvas/collections-panel-button'
 export { CollectionsQuickActions } from './canvas/collections-quick-actions'
+export { useCollectionsEnabled } from './canvas/license'
 export { placeCollectionItem } from './canvas/place-item'
 export {
 	saveShapesToCollection,
