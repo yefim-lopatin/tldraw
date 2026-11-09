@@ -163,6 +163,15 @@ async function main() {
 				getDateOffset(60) // 2 months future
 			),
 		},
+		{
+			name: 'License with Collections Feature',
+			info: createLicenseInfo(
+				'test-feat-collections',
+				['localhost'],
+				FLAGS.ANNUAL_LICENSE | FLAGS.FEAT_COLLECTIONS,
+				getDateOffset(60) // 2 months future
+			),
+		},
 
 		// === GRACE PERIOD TESTING ===
 		{
