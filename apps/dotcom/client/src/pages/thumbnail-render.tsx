@@ -33,6 +33,7 @@ import {
 	getHashForString,
 } from 'tldraw'
 import 'tldraw/tldraw.css'
+import { useFileSnapshotStore } from '../hooks/useFileSnapshotStore'
 import { assetUrls } from '../utils/assetUrls'
 import {
 	getRequestedBounds,
@@ -246,6 +247,7 @@ function ThumbnailRenderPage({
 		}),
 		[schema, records]
 	)
+	const store = useFileSnapshotStore(snapshot, embedShapeUtils)
 
 	// Once the export is ready it's shown as a full-viewport <img>, so the worker's Browser Rendering
 	// screenshot captures the exact editor.toImage output rather than the live editor canvas. An
@@ -273,7 +275,7 @@ function ThumbnailRenderPage({
 				assetUrls={assetUrls}
 				shapeUtils={embedShapeUtils}
 				components={{ ErrorFallback: ThumbnailRenderCrash }}
-				snapshot={snapshot}
+				store={store}
 				onMount={(editor) => {
 					pageTimings.mountAt = performance.now()
 					editor.user.updateUserPreferences({ colorScheme: theme })
