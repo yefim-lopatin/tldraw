@@ -67,6 +67,13 @@ const router = createBrowserRouter([
 			return { element: <CollectionsStress /> }
 		},
 	},
+	{
+		path: 'collections-board',
+		lazy: async () => {
+			const { default: CollectionsBoard } = await import('./misc/collections-board')
+			return { element: <CollectionsBoard /> }
+		},
+	},
 	...examples.flatMap((exampleArray) =>
 		exampleArray.value.flatMap((example) => [
 			{
