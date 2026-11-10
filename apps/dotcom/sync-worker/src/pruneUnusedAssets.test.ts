@@ -26,4 +26,28 @@ describe('pruneUnusedAssetsForTldr', () => {
 				.map((r) => r.id)
 		).toEqual(['asset:by-shape', 'asset:in-array', 'asset:in-object'])
 	})
+
+	it('keeps an asset that only a board collection item uses', () => {
+		const records = [
+			asset('asset:in-collection'),
+			{
+				id: 'collection-item:photo',
+				typeName: 'collection-item',
+				collectionId: 'collection:photos',
+				thumbnail: 'asset:in-collection',
+				version: 1,
+				meta: {},
+			},
+			{
+				id: 'collection-item-content:photo',
+				typeName: 'collection-item-content',
+				itemId: 'collection-item:photo',
+				content: { shapes: [], rootShapeIds: [], schema: {} },
+				assetIds: ['asset:in-collection'],
+				meta: {},
+			},
+		] as unknown as TLRecord[]
+
+		expect(pruneUnusedAssetsForTldr(records)).toEqual(records)
+	})
 })
