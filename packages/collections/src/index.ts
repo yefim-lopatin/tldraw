@@ -48,6 +48,10 @@ export {
 	type TLNewCollectionOptions,
 } from './lib/CollectionSource'
 export {
+	BoardCollectionSource,
+	type BoardCollectionSourceOptions,
+} from './lib/BoardCollectionSource'
+export {
 	CompositeCollectionSource,
 	type CompositeCollectionSourceOptions,
 	type CompositeCollectionSourcePart,
