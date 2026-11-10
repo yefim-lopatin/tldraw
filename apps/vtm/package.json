@@ -1,0 +1,42 @@
+{
+	"name": "@tldraw/vtm",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "concurrently -k -n server,client \"pnpm dev-server\" \"pnpm dev-client\"",
+		"dev-server": "tsx watch src/server/server.ts",
+		"dev-client": "vite --host 127.0.0.1",
+		"build": "vite build",
+		"start": "tsx src/server/server.ts",
+		"build-types": "tsc --build",
+		"test": "vitest run",
+		"lint": "tsx ../../internal/scripts/lint.ts"
+	},
+	"dependencies": {
+		"@fastify/static": "^8.0.4",
+		"@fastify/websocket": "^11.0.0",
+		"@tldraw/sync": "workspace:*",
+		"@tldraw/sync-core": "workspace:*",
+		"@tldraw/tlschema": "workspace:*",
+		"@tldraw/validate": "workspace:*",
+		"cannon-es": "0.20.0",
+		"fastify": "^5.8.1",
+		"react": "^19.2.1",
+		"react-dom": "^19.2.1",
+		"three": "0.180.0",
+		"tldraw": "workspace:*",
+		"ws": "^8.18.0"
+	},
+	"devDependencies": {
+		"@types/node": "^22.15.31",
+		"@types/react": "^19.2.7",
+		"@types/react-dom": "^19.2.3",
+		"@types/three": "0.180.0",
+		"@types/ws": "^8.18.1",
+		"@vitejs/plugin-react": "^6.0.1",
+		"concurrently": "^9.1.2",
+		"vite": "^8.0.16",
+		"vitest": "^5.0.0"
+	}
+}

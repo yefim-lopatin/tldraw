@@ -77,7 +77,10 @@
 		"i18n-extract": "tsx internal/scripts/i18n-extract.ts",
 		"i18n-upload-strings": "tsx internal/scripts/i18n-upload-strings.ts",
 		"i18n-download-strings": "tsx internal/scripts/i18n-download-strings.ts",
-		"i18n-fix-strings": "tsx internal/scripts/i18n-fix-strings.ts"
+		"i18n-fix-strings": "tsx internal/scripts/i18n-fix-strings.ts",
+		"dev-vtm": "pnpm --filter @tldraw/vtm dev",
+		"build-vtm": "pnpm --filter @tldraw/vtm build",
+		"start-vtm": "pnpm --filter @tldraw/vtm start"
 	},
 	"engines": {
 		"npm": ">=7.0.0",
