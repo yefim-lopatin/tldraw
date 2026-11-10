@@ -16,6 +16,10 @@ const W = 'group_www11112222www'
 const COLLECTION_ID = 'coll_aaaa11112222bbbb'
 const ITEM_ID = 'item_1111222233334444'
 const CONTENT = { formatVersion: 1, content: { shapes: [], rootShapeIds: [], schema: {} } }
+const png = () => new Blob([new Uint8Array([1])], { type: 'image/png' })
+
+// The collection and the user's role, no item with the id, then the inserted row's id.
+const adding = (access: unknown) => [[access], [], [{ id: ITEM_ID }]]
 
 function mockPool(resultSets: unknown[][]) {
 	const fake = createFakeKysely(resultSets)
@@ -34,9 +38,11 @@ function makeEnv() {
 const uploadNames = async (env: Environment) =>
 	(await env.UPLOADS.list()).objects.map((o: { key: string }) => o.key)
 
-function addRequest(fields: Record<string, string | Blob>) {
+function addRequest(fields: Record<string, string | Blob | undefined>) {
 	const form = new FormData()
-	for (const [key, value] of Object.entries(fields)) form.set(key, value)
+	for (const [key, value] of Object.entries({ id: ITEM_ID, ...fields })) {
+		if (value !== undefined) form.set(key, value)
+	}
 	return Object.assign(
 		new Request(`https://sync.tldraw.xyz/app/collections/${COLLECTION_ID}/items`, {
 			method: 'POST',
@@ -80,8 +86,8 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks())
 
 describe('addCollectionItem', () => {
-	it("stores a member's item and inserts its row under an id the worker picks", async () => {
-		const fake = mockPool([[collectionAccess(W, 'member')]])
+	it("stores a member's item and inserts its row under the id the client picked", async () => {
+		const fake = mockPool(adding(collectionAccess(W, 'member')))
 		const env = makeEnv()
 		const response = await addCollectionItem(
 			addRequest({
@@ -94,20 +100,22 @@ describe('addCollectionItem', () => {
 
 		expect(response.status).toBe(200)
 		const { id, thumbnail } = (await response.json()) as { id: string; thumbnail: string }
-		expect(id).not.toBe(ITEM_ID)
-		expect(await (await env.ROOMS.get(getCollectionItemContentKey(id)))!.json()).toEqual(CONTENT)
+		expect(id).toBe(ITEM_ID)
+		expect(await (await env.ROOMS.get(getCollectionItemContentKey(ITEM_ID)))!.json()).toEqual(
+			CONTENT
+		)
 		const [objectName] = await uploadNames(env)
 		expect(objectName).toMatch(/-webp$/)
-		expect(objectName).not.toContain(id)
+		expect(objectName).not.toContain(ITEM_ID)
 		expect(thumbnail).toBe(`https://content.test/${objectName}`)
 		const insert = fake.queries.find((q) => q.sql.startsWith('insert into "collection_item"'))!
 		expect(insert.parameters).toEqual(
-			expect.arrayContaining([id, COLLECTION_ID, 'Button', JSON.stringify(thumbnail), ME])
+			expect.arrayContaining([ITEM_ID, COLLECTION_ID, 'Button', JSON.stringify(thumbnail), ME])
 		)
 	})
 
 	it('stores a light and a dark thumbnail', async () => {
-		const fake = mockPool([[collectionAccess(W, 'member')]])
+		const fake = mockPool(adding(collectionAccess(W, 'member')))
 		const env = makeEnv()
 		const response = await addCollectionItem(
 			addRequest({
@@ -150,7 +158,7 @@ describe('addCollectionItem', () => {
 	})
 
 	it('adds to a collection in my home workspace, which may have no group_user row', async () => {
-		mockPool([[collectionAccess(ME, null)]])
+		mockPool(adding(collectionAccess(ME, null)))
 		const response = await addCollectionItem(
 			addRequest({ content: JSON.stringify(CONTENT) }),
 			makeEnv()
@@ -189,10 +197,70 @@ describe('addCollectionItem', () => {
 				darkThumbnail: new Blob([new Uint8Array([2])], { type: 'image/png' }),
 			},
 		],
+		['a request without an id', { id: undefined, content: JSON.stringify(CONTENT) }],
+		['an id uniqueId would not make', { id: 'item_1', content: JSON.stringify(CONTENT) }],
+		[
+			'an id with characters uniqueId does not use',
+			{ id: 'item/../111222233334444', content: JSON.stringify(CONTENT) },
+		],
 	])('refuses %s', async (_, fields) => {
-		mockPool([[collectionAccess(W, 'member')]])
-		const response = await addCollectionItem(addRequest(fields), makeEnv())
+		const fake = mockPool(adding(collectionAccess(W, 'member')))
+		const env = makeEnv()
+		const response = await addCollectionItem(addRequest(fields), env)
 		expect(response.status).toBe(400)
+		expect((await env.ROOMS.list()).objects).toEqual([])
+		expect(fake.queries.some((q) => q.sql.startsWith('insert'))).toBe(false)
+	})
+
+	it('refuses an id that names an existing item, before storing anything', async () => {
+		const fake = mockPool([[collectionAccess(W, 'member')], [{ id: ITEM_ID }]])
+		const env = makeEnv()
+		const response = await addCollectionItem(
+			addRequest({ content: JSON.stringify(CONTENT), thumbnail: png() }),
+			env
+		)
+		expect(response.status).toBe(409)
+		expect((await env.ROOMS.list()).objects).toEqual([])
+		expect(await uploadNames(env)).toEqual([])
+		expect(fake.queries.some((q) => q.sql.startsWith('insert'))).toBe(false)
+	})
+
+	it("refuses the id of a deleted item whose content hasn't been removed yet", async () => {
+		const fake = mockPool([[collectionAccess(W, 'member')], []])
+		const env = makeEnv()
+		await env.ROOMS.put(getCollectionItemContentKey(ITEM_ID), JSON.stringify(CONTENT))
+		const response = await addCollectionItem(addRequest({ content: JSON.stringify(CONTENT) }), env)
+		expect(response.status).toBe(409)
+		expect(await (await env.ROOMS.get(getCollectionItemContentKey(ITEM_ID)))!.json()).toEqual(
+			CONTENT
+		)
+		expect(fake.queries.some((q) => q.sql.startsWith('insert'))).toBe(false)
+	})
+
+	it('answers 409 when another request inserts the id first, removing the uploads it stored', async () => {
+		// no item when it checks, but the insert finds one
+		const fake = mockPool([[collectionAccess(W, 'member')], [], []])
+		const env = makeEnv()
+		await env.UPLOADS.put('abc123-png', new Uint8Array([1, 2, 3]))
+		const image = {
+			id: 'asset:photo',
+			typeName: 'asset',
+			type: 'image',
+			props: { src: 'https://content.test/abc123-png', w: 10, h: 10 },
+			meta: {},
+		}
+		const response = await addCollectionItem(
+			addRequest({
+				content: JSON.stringify({ ...CONTENT, content: { ...CONTENT.content, assets: [image] } }),
+				thumbnail: png(),
+			}),
+			env
+		)
+		expect(response.status).toBe(409)
+		expect(await env.ROOMS.head(getCollectionItemContentKey(ITEM_ID))).not.toBeNull()
+		expect(await uploadNames(env)).toEqual(['abc123-png'])
+		expect(fake.queries.some((q) => q.sql.includes('collection_item_asset'))).toBe(false)
+		expect(fake.queries.at(-1)!.sql).toBe('commit')
 	})
 })
 
@@ -208,7 +276,7 @@ describe('addCollectionItem, with uploaded images in the content', () => {
 		JSON.stringify({ ...CONTENT, content: { ...CONTENT.content, assets } })
 
 	it('copies each uploaded image to an object the item owns and points the content at it', async () => {
-		const fake = mockPool([[collectionAccess(W, 'member')]])
+		const fake = mockPool(adding(collectionAccess(W, 'member')))
 		const env = makeEnv()
 		await env.UPLOADS.put('abc123-png', new Uint8Array([1, 2, 3]))
 
@@ -217,28 +285,28 @@ describe('addCollectionItem, with uploaded images in the content', () => {
 			env
 		)
 
-		const { id } = (await response.json()) as { id: string }
+		expect(response.status).toBe(200)
 		const uploads = await uploadNames(env)
 		const copyName = uploads.find((key: string) => key !== 'abc123-png')!
 		expect(copyName).toMatch(/-png$/)
-		const stored = await (await env.ROOMS.get(getCollectionItemContentKey(id)))!.json<any>()
+		const stored = await (await env.ROOMS.get(getCollectionItemContentKey(ITEM_ID)))!.json<any>()
 		expect(stored.content.assets[0].props.src).toBe(`https://content.test/${copyName}`)
 		// so a board it's placed on copies the image for itself
 		expect(stored.content.assets[0].meta).toEqual({})
 		const ownership = fake.queries.find((q) =>
 			q.sql.startsWith('insert into "collection_item_asset"')
 		)!
-		expect(ownership.parameters).toEqual([id, copyName])
+		expect(ownership.parameters).toEqual([ITEM_ID, copyName])
 	})
 
 	it('leaves an asset whose upload is missing, or that is not an upload, as it was', async () => {
-		const fake = mockPool([[collectionAccess(W, 'member')]])
+		const fake = mockPool(adding(collectionAccess(W, 'member')))
 		const env = makeEnv()
 		const assets = [image('https://content.test/gone-png'), image('data:image/png;base64,AAAA')]
 		const response = await addCollectionItem(addRequest({ content: withAssets(assets) }), env)
 
-		const { id } = (await response.json()) as { id: string }
-		const stored = await (await env.ROOMS.get(getCollectionItemContentKey(id)))!.json<any>()
+		expect(response.status).toBe(200)
+		const stored = await (await env.ROOMS.get(getCollectionItemContentKey(ITEM_ID)))!.json<any>()
 		expect(stored.content.assets).toEqual(assets)
 		expect(fake.queries.some((q) => q.sql.includes('collection_item_asset'))).toBe(false)
 	})
