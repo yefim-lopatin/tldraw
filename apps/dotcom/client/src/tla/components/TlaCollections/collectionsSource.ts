@@ -31,21 +31,16 @@ const messages = defineMessages({
 type MutationResult = { type: 'success' } | MutatorResultErrorDetails
 
 interface StoredItem {
-	id: string
 	createdAt: number
 	thumbnail: TlaCollectionItemThumbnail | null
 }
 
-/**
- * An item being added: listed until its row arrives through Zero, first under an id made up here
- * while the worker stores it, then under its row's id.
- */
+/** An item being added, under the id its row will have: listed until the row arrives through Zero. */
 interface PendingItem {
-	key: TLCollectionItemId
 	item: TLCollectionItem
 	content: TLCollectionItemContent
-	/** The row's id once the row has arrived, or undefined when adding failed. */
-	arrived: Promise<string | undefined>
+	/** Whether the row arrived: false when adding failed. */
+	arrived: Promise<boolean>
 }
 
 // A row's id is the record id without its type prefix.
@@ -230,12 +225,12 @@ export class TldrawAppCollectionsSource implements CollectionSource {
 		const thumbnail =
 			newItem.thumbnail && mapThumbnail(newItem.thumbnail, (blob) => URL.createObjectURL(blob))
 		const name = newItem.name ? { name: newItem.name } : {}
-		const key = CollectionItemRecordType.createId()
-		let arrive: (id: string | undefined) => void = () => {}
+		const id = uniqueId()
+		const itemId = CollectionItemRecordType.createId(id)
+		let arrive: (arrived: boolean) => void = () => {}
 		const pending: PendingItem = {
-			key,
 			item: CollectionItemRecordType.create({
-				id: key,
+				id: itemId,
 				collectionId,
 				...name,
 				...(thumbnail ? { thumbnail } : {}),
@@ -251,29 +246,29 @@ export class TldrawAppCollectionsSource implements CollectionSource {
 		let stored: StoredItem
 		try {
 			await this.whenConfirmed(collectionId)
-			stored = await this.storeItem(collectionId, newItem)
+			stored = await this.storeItem(id, collectionId, newItem)
 		} catch (error) {
-			this.pendingItems.update((all) => all.filter((p) => p.key !== key))
+			this.pendingItems.update((all) => all.filter((p) => p.item.id !== itemId))
 			if (thumbnail) revokeThumbnail(thumbnail)
-			arrive(undefined)
+			arrive(false)
 			throw error
 		}
 
 		const listedThumbnail = thumbnail ?? stored.thumbnail
 		const item = CollectionItemRecordType.create({
-			id: CollectionItemRecordType.createId(stored.id),
+			id: itemId,
 			collectionId,
 			...name,
 			...(listedThumbnail ? { thumbnail: listedThumbnail } : {}),
 			createdAt: stored.createdAt,
 		})
 		if (thumbnail) {
-			this.localThumbnails.update((all) => new Map(all).set(stored.id, thumbnail))
+			this.localThumbnails.update((all) => new Map(all).set(id, thumbnail))
 		}
-		this.pendingItems.update((all) => all.map((p) => (p.key === key ? { ...p, item } : p)))
-		this.whenItemRowArrives(stored.id).then(() => {
-			this.pendingItems.update((all) => all.filter((p) => p.key !== key))
-			arrive(stored.id)
+		this.pendingItems.update((all) => all.map((p) => (p.item.id === itemId ? { ...p, item } : p)))
+		this.whenItemRowArrives(id).then(() => {
+			this.pendingItems.update((all) => all.filter((p) => p.item.id !== itemId))
+			arrive(true)
 		})
 		return item
 	}
@@ -314,10 +309,12 @@ export class TldrawAppCollectionsSource implements CollectionSource {
 	}
 
 	private async storeItem(
+		id: string,
 		collectionId: TLCollectionId,
 		newItem: TLNewCollectionItem
 	): Promise<StoredItem> {
 		const form = new FormData()
+		form.set('id', id)
 		form.set('content', JSON.stringify(newItem.content))
 		if (newItem.thumbnail) {
 			form.set('thumbnail', getThumbnailForColorMode(newItem.thumbnail, 'light'))
@@ -333,16 +330,14 @@ export class TldrawAppCollectionsSource implements CollectionSource {
 	}
 
 	private findPendingItem(itemId: TLCollectionItemId) {
-		return this.pendingItems.get().find((p) => p.key === itemId || p.item.id === itemId)
+		return this.pendingItems.get().find((p) => p.item.id === itemId)
 	}
 
 	// The mutators need the item's row in the local store, which a pending item doesn't have yet.
 	private async getItemRowId(itemId: TLCollectionItemId) {
 		const pending = this.findPendingItem(itemId)
-		if (!pending) return rowId(itemId)
-		const id = await pending.arrived
-		if (id === undefined) throw new CollectionNotFoundError(itemId)
-		return id
+		if (pending && !(await pending.arrived)) throw new CollectionNotFoundError(itemId)
+		return rowId(itemId)
 	}
 
 	private hasItemRow(id: string) {

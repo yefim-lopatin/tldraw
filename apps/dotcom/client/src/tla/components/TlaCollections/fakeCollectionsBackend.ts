@@ -136,11 +136,11 @@ export function createFakeCollectionsBackend({
 	}
 
 	const addItem = (
+		id: string,
 		collectionId: string,
 		name: string | null,
 		thumbnail: TlaCollectionItemThumbnail | null
 	) => {
-		const id = uniqueId()
 		const item: TlaCollectionItem = {
 			id,
 			collectionId,
@@ -161,7 +161,10 @@ export function createFakeCollectionsBackend({
 		let match = url.match(/^\/api\/app\/collections\/([^/]+)\/items$/)
 		if (match && init.method === 'POST') {
 			const form = init.body as FormData
+			const id = form.get('id')
+			if (typeof id !== 'string') return new Response(null, { status: 400 })
 			const item = addItem(
+				id,
 				match[1],
 				(form.get('name') as string | null) ?? null,
 				newThumbnail(
@@ -181,6 +184,7 @@ export function createFakeCollectionsBackend({
 			for (const item of source.items) {
 				const { thumbnail } = item
 				const copy = addItem(
+					uniqueId(),
 					id,
 					item.name,
 					newThumbnail(thumbnail !== null, typeof thumbnail === 'object' && thumbnail !== null)
