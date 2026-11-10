@@ -1,8 +1,6 @@
+import { Popover } from 'radix-ui'
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react'
 import {
-	TldrawUiPopover,
-	TldrawUiPopoverTrigger,
-	TldrawUiPopoverContent,
 	TldrawUiToolbarButton,
 	getFromLocalStorage,
 	setInLocalStorage,
@@ -13,7 +11,6 @@ import type { Roll } from '../../shared/dice'
 import { DiceIcon } from './DiceIcons'
 import { DICE_SIDES, type DiceSides } from './diceSvg'
 import { addDiceText, loadDiceFont, getDieCharacter } from './diceText'
-import { DiceThrow } from './DiceThrow'
 import { getHungerCount } from './v5Dice'
 export type { DiceSides } from './diceSvg'
 
@@ -59,7 +56,7 @@ interface DragState {
 	hasMoved: boolean
 }
 
-interface RollAnimation {
+interface RollAtPoint {
 	id: string
 	sides: DiceSides
 	count: number
@@ -108,11 +105,10 @@ export function DiceRoller({ editor, roomId, username, onRoll }: DiceRollerProps
 	const [difficulty, setDifficulty] = useState(1)
 	const [diceCounts, setDiceCounts] = useState(createInitialDiceCounts)
 	const [dragPreview, setDragPreview] = useState<DragState | null>(null)
-	const [rollAnimation, setRollAnimation] = useState<RollAnimation | null>(null)
 	const dragStateRef = useRef<DragState | null>(null)
 	const triggerRef = useRef<HTMLButtonElement | null>(null)
 	const addRollToCanvas = useCallback(
-		async (roll: RollAnimation) => {
+		async (roll: RollAtPoint) => {
 			await loadDiceFont(editor)
 			const point = editor.screenToPage({ x: roll.clientX, y: roll.clientY })
 			const row: Roll = {
@@ -153,9 +149,11 @@ export function DiceRoller({ editor, roomId, username, onRoll }: DiceRollerProps
 				clientX,
 				clientY,
 			}
-			setRollAnimation(roll)
+			void addRollToCanvas(roll).catch(() =>
+				setError('Не удалось отобразить бросок. Попробуйте ещё раз.')
+			)
 		},
-		[hunger, difficulty, section]
+		[hunger, difficulty, section, addRollToCanvas]
 	)
 	useEffect(() => {
 		const handlePointerMove = (event: globalThis.PointerEvent) => {
@@ -231,7 +229,7 @@ export function DiceRoller({ editor, roomId, username, onRoll }: DiceRollerProps
 		}
 	}, [editor])
 	const handleDiePointerDown = (event: PointerEvent<HTMLButtonElement>, sides: DiceSides) => {
-		if (event.button > 0 || rollAnimation) {
+		if (event.button > 0) {
 			return
 		}
 		const nextDragState = {
@@ -254,188 +252,184 @@ export function DiceRoller({ editor, roomId, username, onRoll }: DiceRollerProps
 		}))
 	}
 	return (
-		<TldrawUiPopover id="vtm-dice" className="dice-roller" onOpenChange={setIsOpen}>
-			<TldrawUiPopoverTrigger>
-				<TldrawUiToolbarButton
-					ref={triggerRef}
-					type="icon"
-					aria-label="Открыть кубики"
-					title="Кубики (Shift+D)"
-					isActive={isOpen}
-				>
-					<DiceIcon sides={20} />
-				</TldrawUiToolbarButton>
-			</TldrawUiPopoverTrigger>
-			{error && (
-				<p className="vtm-error" role="alert">
-					{error}
-				</p>
-			)}
+		<Popover.Root open={isOpen} onOpenChange={setIsOpen} modal={false}>
+			<div className="dice-roller">
+				<Popover.Trigger asChild>
+					<TldrawUiToolbarButton
+						ref={triggerRef}
+						type="icon"
+						aria-label="Открыть кубики"
+						title="Кубики (Shift+D)"
+						isActive={isOpen}
+					>
+						<DiceIcon sides={20} />
+					</TldrawUiToolbarButton>
+				</Popover.Trigger>
+				{error && (
+					<p className="vtm-error" role="alert">
+						{error}
+					</p>
+				)}
 
-			{isOpen && (
-				<TldrawUiPopoverContent
-					side="top"
-					align="end"
-					collisionPadding={12}
-					autoFocusFirstButton={false}
-				>
-					<div className="dice-roller__menu" role="dialog" aria-label="Кубики">
-						<button
-							className="dice-roller__close"
-							type="button"
-							aria-label="Закрыть кубики"
-							onClick={() => triggerRef.current?.click()}
+				{isOpen && (
+					<Popover.Portal container={editor.getContainer()}>
+						<Popover.Content
+							className="tlui-popover__content"
+							side="top"
+							align="end"
+							sideOffset={8}
+							collisionPadding={12}
+							aria-label="Кубики"
+							onInteractOutside={(event) => event.preventDefault()}
+							onOpenAutoFocus={(event) => event.preventDefault()}
+							onCloseAutoFocus={(event) => event.preventDefault()}
 						>
-							×
-						</button>
-
-						{section === null ? (
-							<div className="dice-roller__sections">
-								<button type="button" onClick={() => selectSection('dice')}>
-									Dice
-								</button>
-								<button type="button" onClick={() => selectSection('vtm')}>
-									VTM<small>Вампиры: Маскарад</small>
-								</button>
-							</div>
-						) : (
-							<>
+							<div
+								className="dice-roller__menu"
+								onPointerDown={(event) => event.stopPropagation()}
+								onWheel={(event) => event.stopPropagation()}
+							>
 								<button
+									className="dice-roller__close"
 									type="button"
-									className="dice-roller__back"
-									onClick={() => selectSection(null)}
-									aria-label="Назад к выбору кубиков"
+									aria-label="Закрыть кубики"
+									onClick={() => triggerRef.current?.click()}
 								>
-									← Назад
+									×
 								</button>
-								<div
-									className={`dice-roller__grid${section === 'vtm' ? ' dice-roller__grid--vtm' : ''}`}
-								>
-									{(section === 'vtm' ? [10 as const] : DICE_SIDES).map((sides) => {
-										const count = diceCounts[sides]
-										return (
-											<div className="dice-roller__die-wrapper" key={sides}>
+
+								{section === null ? (
+									<div className="dice-roller__sections">
+										<button type="button" onClick={() => selectSection('dice')}>
+											Dice
+										</button>
+										<button type="button" onClick={() => selectSection('vtm')}>
+											VTM<small>Вампиры: Маскарад</small>
+										</button>
+									</div>
+								) : (
+									<>
+										<button
+											type="button"
+											className="dice-roller__back"
+											onClick={() => selectSection(null)}
+											aria-label="Назад к выбору кубиков"
+										>
+											← Назад
+										</button>
+										<div
+											className={`dice-roller__grid${section === 'vtm' ? ' dice-roller__grid--vtm' : ''}`}
+										>
+											{(section === 'vtm' ? [10 as const] : DICE_SIDES).map((sides) => {
+												const count = diceCounts[sides]
+												return (
+													<div className="dice-roller__die-wrapper" key={sides}>
+														<div className="dice-roller__quantity-controls">
+															<button
+																type="button"
+																aria-label={`Уменьшить количество d${sides}`}
+																disabled={count === 1}
+																onClick={() => updateDiceCount(sides, -1)}
+															>
+																−
+															</button>
+															<output aria-label={`Количество d${sides}`}>{count}</output>
+															<button
+																type="button"
+																aria-label={`Увеличить количество d${sides}`}
+																disabled={count === MAX_DICE_COUNT}
+																onClick={() => updateDiceCount(sides, 1)}
+															>
+																+
+															</button>
+														</div>
+														<button
+															className="dice-roller__die"
+															type="button"
+															aria-label={`Бросить ${count} кубик(а) d${sides}`}
+															onPointerDown={(event) => handleDiePointerDown(event, sides)}
+															onClick={(event) => {
+																if (event.detail !== 0) return
+																const bounds = editor.getViewportScreenBounds()
+																startRollAtPoint(sides, count, bounds.center.x, bounds.center.y)
+															}}
+														>
+															{section === 'vtm' ? <VtmIcon /> : <DiceIcon sides={sides} />}
+														</button>
+													</div>
+												)
+											})}
+										</div>
+										{section === 'vtm' && (
+											<div className="dice-roller__hunger">
+												<span>Кубики голода</span>
 												<div className="dice-roller__quantity-controls">
 													<button
 														type="button"
-														aria-label={`Уменьшить количество d${sides}`}
-														disabled={count === 1}
-														onClick={() => updateDiceCount(sides, -1)}
+														aria-label="Уменьшить кубики голода"
+														disabled={hunger === 0}
+														onClick={() => setHunger((n) => Math.max(0, n - 1))}
 													>
 														−
 													</button>
-													<output aria-label={`Количество d${sides}`}>{count}</output>
+													<output aria-label="Количество кубиков голода">{hunger}</output>
 													<button
 														type="button"
-														aria-label={`Увеличить количество d${sides}`}
-														disabled={count === MAX_DICE_COUNT}
-														onClick={() => updateDiceCount(sides, 1)}
+														aria-label="Увеличить кубики голода"
+														disabled={hunger === 10}
+														onClick={() => setHunger((n) => Math.min(10, n + 1))}
 													>
 														+
 													</button>
 												</div>
-												<button
-													className="dice-roller__die"
-													type="button"
-													aria-label={`Бросить ${count} кубик(а) d${sides}`}
-													onPointerDown={(event) => handleDiePointerDown(event, sides)}
-													onClick={(event) => {
-														if (event.detail !== 0 || rollAnimation) return
-														const bounds = editor.getViewportScreenBounds()
-														startRollAtPoint(sides, count, bounds.center.x, bounds.center.y)
-													}}
-												>
-													{section === 'vtm' ? <VtmIcon /> : <DiceIcon sides={sides} />}
-												</button>
+												<small>Заменяют обычные d10 в броске</small>
+												<div className="dice-roller__difficulty">
+													<span>Сложность</span>
+													<div className="dice-roller__quantity-controls">
+														<button
+															type="button"
+															aria-label="Уменьшить сложность"
+															disabled={difficulty === 0}
+															onClick={() => setDifficulty((n) => Math.max(0, n - 1))}
+														>
+															−
+														</button>
+														<output aria-label="Сложность проверки">{difficulty}</output>
+														<button
+															type="button"
+															aria-label="Увеличить сложность"
+															disabled={difficulty === 40}
+															onClick={() => setDifficulty((n) => Math.min(40, n + 1))}
+														>
+															+
+														</button>
+													</div>
+												</div>
+												{difficulty === 0 && (
+													<small>Состязание: сравните успехи с соперником</small>
+												)}
 											</div>
-										)
-									})}
-								</div>
-								{section === 'vtm' && (
-									<div className="dice-roller__hunger">
-										<span>Кубики голода</span>
-										<div className="dice-roller__quantity-controls">
-											<button
-												type="button"
-												aria-label="Уменьшить кубики голода"
-												disabled={hunger === 0}
-												onClick={() => setHunger((n) => Math.max(0, n - 1))}
-											>
-												−
-											</button>
-											<output aria-label="Количество кубиков голода">{hunger}</output>
-											<button
-												type="button"
-												aria-label="Увеличить кубики голода"
-												disabled={hunger === 10}
-												onClick={() => setHunger((n) => Math.min(10, n + 1))}
-											>
-												+
-											</button>
-										</div>
-										<small>Заменяют обычные d10 в броске</small>
-										<div className="dice-roller__difficulty">
-											<span>Сложность</span>
-											<div className="dice-roller__quantity-controls">
-												<button
-													type="button"
-													aria-label="Уменьшить сложность"
-													disabled={difficulty === 0}
-													onClick={() => setDifficulty((n) => Math.max(0, n - 1))}
-												>
-													−
-												</button>
-												<output aria-label="Сложность проверки">{difficulty}</output>
-												<button
-													type="button"
-													aria-label="Увеличить сложность"
-													disabled={difficulty === 40}
-													onClick={() => setDifficulty((n) => Math.min(40, n + 1))}
-												>
-													+
-												</button>
-											</div>
-										</div>
-										{difficulty === 0 && <small>Состязание: сравните успехи с соперником</small>}
-									</div>
+										)}
+									</>
 								)}
-							</>
-						)}
+							</div>
+						</Popover.Content>
+					</Popover.Portal>
+				)}
+
+				{dragPreview && (
+					<div
+						className="dice-roller__drag-preview"
+						style={{ left: dragPreview.clientX, top: dragPreview.clientY }}
+						aria-hidden="true"
+					>
+						{section === 'vtm' ? <VtmIcon /> : <DiceIcon sides={dragPreview.sides} />}
+						<span>
+							d{dragPreview.sides} × {dragPreview.count}
+						</span>
 					</div>
-				</TldrawUiPopoverContent>
-			)}
-
-			{dragPreview && (
-				<div
-					className="dice-roller__drag-preview"
-					style={{ left: dragPreview.clientX, top: dragPreview.clientY }}
-					aria-hidden="true"
-				>
-					{section === 'vtm' ? <VtmIcon /> : <DiceIcon sides={dragPreview.sides} />}
-					<span>
-						d{dragPreview.sides} × {dragPreview.count}
-					</span>
-				</div>
-			)}
-
-			{rollAnimation && (
-				<DiceThrow
-					key={rollAnimation.id}
-					sides={rollAnimation.sides}
-					count={rollAnimation.count}
-					hunger={rollAnimation.hunger}
-					difficulty={rollAnimation.difficulty}
-					clientX={rollAnimation.clientX}
-					clientY={rollAnimation.clientY}
-					onResult={({ results }) => {
-						void addRollToCanvas({
-							...rollAnimation,
-							results: results.length ? results : rollAnimation.results,
-						}).catch(() => setError('Не удалось отобразить бросок. Попробуйте ещё раз.'))
-					}}
-					onComplete={() => setRollAnimation(null)}
-				/>
-			)}
-		</TldrawUiPopover>
+				)}
+			</div>
+		</Popover.Root>
 	)
 }
