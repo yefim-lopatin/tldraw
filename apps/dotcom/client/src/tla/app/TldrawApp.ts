@@ -303,7 +303,10 @@ export class TldrawApp {
 		this.isLoadRumEnabled = flags.load_rum?.enabled ?? false
 		this.collectionRows$ = atom('collection rows signal', [], { isEqual })
 		if (flags.collections?.enabled) {
-			this.collections = new TldrawAppCollectionsSource(this, getToken)
+			// Annotated: inferred, its type would depend on TldrawApp's own and make them circular.
+			const collections: TldrawAppCollectionsSource = new TldrawAppCollectionsSource(this, getToken)
+			this.collections = collections
+			this.disposables.push(() => collections.dispose())
 		} else {
 			this.collections = null
 		}
