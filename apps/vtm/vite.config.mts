@@ -5,6 +5,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
 	plugins: [react()],
 	root: fileURLToPath(new URL('./src/client', import.meta.url)),
+	publicDir: fileURLToPath(new URL('./public', import.meta.url)),
 	build: { outDir: '../../dist', emptyOutDir: true },
 	server: {
 		port: 5757,

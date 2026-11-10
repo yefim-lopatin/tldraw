@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { NodeSqliteWrapper, SQLiteSyncStorage, TLSocketRoom } from '@tldraw/sync-core'
 import { createTLSchema, defaultShapeSchemas, type TLRecord } from '@tldraw/tlschema'
+import '../shared/diceFont'
 import { diceRollProps } from '../shared/dice'
 
 const schema = createTLSchema({

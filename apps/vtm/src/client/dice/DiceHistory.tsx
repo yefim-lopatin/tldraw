@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { getFromSessionStorage, setInSessionStorage } from 'tldraw'
 import type { Roll } from '../../shared/dice'
-import { createDieSvg } from './diceSvg'
-import { createV5DieSvg, getV5Result } from './v5Dice'
+import { getDieCharacter } from './diceText'
+import { getV5Result } from './v5Dice'
 
 export function DiceHistory({ roomId, revision }: { roomId: string; revision: number }) {
 	const [rows, setRows] = useState<Roll[]>([])
@@ -122,13 +122,11 @@ export function DiceHistory({ roomId, revision }: { roomId: string; revision: nu
 								<span
 									key={index}
 									aria-label={`${index < row.hunger ? 'Кубик Голода' : 'Кубик'}: ${n}`}
-									dangerouslySetInnerHTML={{
-										__html:
-											row.difficulty >= 0
-												? createV5DieSvg(n, index < row.hunger)
-												: createDieSvg(row.sides, n, '', false),
-									}}
-								/>
+									className="dice-font"
+									style={{ color: index < row.hunger ? '#b52025' : '#363636' }}
+								>
+									{getDieCharacter(row.sides, n, row.difficulty >= 0, index < row.hunger)}
+								</span>
 							))}
 						</div>
 						<p>

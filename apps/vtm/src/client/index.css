@@ -16,8 +16,7 @@ body {
 	color: #312d2c;
 	font-size: 14px;
 }
-.vtm-room-bar,
-.vtm-dice-tools {
+.vtm-room-bar {
 	position: absolute;
 	pointer-events: auto;
 }
@@ -52,7 +51,8 @@ body {
 	border-radius: 6px;
 }
 .vtm-tools button,
-.vtm-tools input {
+.vtm-tools input,
+.dice-roller__menu button {
 	font: inherit;
 	border: 1px solid #d8d1ce;
 	border-radius: 6px;
@@ -60,14 +60,17 @@ body {
 	background: #fff;
 	color: #312d2c;
 }
-.vtm-tools button {
+.vtm-tools button,
+.dice-roller__menu button {
 	cursor: pointer;
 	min-height: 34px;
 }
-.vtm-tools button:hover {
+.vtm-tools button:hover,
+.dice-roller__menu button:hover {
 	background: #f2eeee;
 }
-.vtm-tools button:disabled {
+.vtm-tools button:disabled,
+.dice-roller__menu button:disabled {
 	cursor: default;
 	opacity: 0.4;
 }
@@ -75,23 +78,6 @@ body {
 .vtm-tools input:focus-visible {
 	outline: 2px solid #a83040;
 	outline-offset: 2px;
-}
-.vtm-dice-tools {
-	bottom: 84px;
-	left: 12px;
-	display: flex;
-	gap: 6px;
-	align-items: flex-end;
-}
-.vtm-tool-button {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	box-shadow: 0 2px 8px #0001;
-}
-.vtm-tool-button kbd {
-	font-size: 11px;
-	color: #777;
 }
 .dice-roller {
 	position: relative;
@@ -104,12 +90,10 @@ body {
 	width: 46px;
 }
 .dice-roller__menu {
-	position: absolute;
-	left: 0;
-	bottom: 48px;
+	position: relative;
 	width: 292px;
 	box-sizing: border-box;
-	max-height: calc(100dvh - 185px);
+	max-height: calc(100dvh - 140px);
 	overflow-y: auto;
 	padding: 18px;
 	background: #fff;
@@ -181,7 +165,7 @@ body {
 .dice-roller__die .dice-roller__icon--percentile {
 	width: 70px;
 }
-.vtm-die-icon svg {
+.vtm-die-icon {
 	width: 48px;
 	height: 48px;
 }
@@ -236,6 +220,7 @@ body.dice-roller--dragging * {
 	color: #8c1925;
 }
 .vtm-history-panel {
+	pointer-events: auto;
 	position: fixed;
 	top: 64px;
 	right: 174px;
@@ -318,7 +303,61 @@ body.dice-roller--dragging * {
 		left: 12px;
 		transform: none;
 	}
-	.vtm-dice-tools {
-		bottom: 84px;
-	}
+}
+
+.vtm-main-toolbar {
+	grid-column: 1 / span 3;
+	grid-row: 1;
+	display: flex;
+	justify-content: center;
+	align-items: flex-end;
+	padding-bottom: calc(var(--tl-space-3) + var(--tl-sab));
+	max-width: 100%;
+	pointer-events: none;
+}
+.vtm-main-toolbar .tlui-main-toolbar {
+	flex-grow: 0;
+	min-width: 0;
+	padding-bottom: 0;
+}
+.vtm-toolbar-addon {
+	pointer-events: auto;
+	align-self: flex-end;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 48px;
+	padding: 4px;
+	box-sizing: border-box;
+	background: var(--tl-color-panel);
+	border: 1px solid var(--tl-color-divider);
+	border-left: 0;
+	border-radius: 0 9px 9px 0;
+	box-shadow: var(--tl-shadow-2);
+}
+.vtm-main-toolbar .tlui-main-toolbar__tools {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.vtm-toolbar-addon .tlui-button {
+	width: 40px;
+	height: 40px;
+}
+.dice-roller__menu {
+	color: var(--tl-color-text);
+	background: var(--tl-color-panel);
+}
+.dice-font {
+	font-family: VtmDice;
+	font-weight: normal;
+	font-size: 64px;
+	line-height: 1.2;
+}
+
+.vtm-die-icon.dice-font {
+	font-size: 48px;
+}
+.vtm-history-dice .dice-font {
+	font-size: 35px;
+	line-height: 1;
 }
