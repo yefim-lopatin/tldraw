@@ -6,9 +6,9 @@ import {
 	useToasts,
 	useTranslation,
 	useValue,
+	type TLCollectionItemId,
 } from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
-import type { TLCollectionItemId } from '../lib/schema'
 import { CollectionGroupSection } from './collection-group-section'
 import { groupCollectionList, useCollectionGrouping } from './collection-groups'
 import { CollectionSection } from './collection-section'

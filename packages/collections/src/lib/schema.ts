@@ -1,35 +1,14 @@
 import type { TLContent } from '@tldraw/editor'
+import { createRecordType, type BaseRecord } from '@tldraw/store'
 import {
-	createRecordMigrationSequence,
-	createRecordType,
-	type BaseRecord,
-	type RecordId,
-} from '@tldraw/store'
-import { idValidator, shapeIdValidator } from '@tldraw/tlschema'
+	idValidator,
+	shapeIdValidator,
+	type TLCollectionId,
+	type TLCollectionItemId,
+	type TLCollectionThumbnail,
+} from '@tldraw/tlschema'
 import type { JsonObject } from '@tldraw/utils'
 import { T } from '@tldraw/validate'
-
-export type TLCollectionId = RecordId<TLCollection>
-
-/** A named list of items. Where it is stored is up to the source that provides it. */
-export interface TLCollection extends BaseRecord<'collection', TLCollectionId> {
-	name: string
-	/**
-	 * Who the collection belongs to, such as a user or a workspace, as the source names them in
-	 * `CollectionSource.getCollectionOwners`. What an owner is stays up to the source. Left out by
-	 * sources that don't track owners.
-	 */
-	ownerId?: string
-	meta: JsonObject
-}
-
-export type TLCollectionItemId = RecordId<TLCollectionItem>
-
-/**
- * An item's preview: one image for every colour mode, or a light and a dark one for apps that have
- * both. `Src` is a URL on a listed item and a `Blob` when adding one.
- */
-export type TLCollectionThumbnail<Src = string> = Src | { light: Src; dark: Src }
 
 function isThumbnailPair<Src>(
 	thumbnail: TLCollectionThumbnail<Src>
@@ -79,18 +58,8 @@ export interface TLCollectionItem extends BaseRecord<'collection-item', TLCollec
 	meta: JsonObject
 }
 
-export type TLCollectionRecord = TLCollection | TLCollectionItem
-
 const nonEmptyString = T.string.check((value) => {
 	if (value.trim().length === 0) throw new T.ValidationError('Expected a non-empty string')
-})
-
-export const collectionValidator: T.Validator<TLCollection> = T.object({
-	id: idValidator<TLCollectionId>('collection'),
-	typeName: T.literal('collection'),
-	name: nonEmptyString,
-	ownerId: nonEmptyString.optional(),
-	meta: T.jsonValue as T.ObjectValidator<JsonObject>,
 })
 
 export const collectionItemValidator: T.Validator<TLCollectionItem> = T.object({
@@ -107,27 +76,10 @@ export const collectionItemValidator: T.Validator<TLCollectionItem> = T.object({
 	meta: T.jsonValue as T.ObjectValidator<JsonObject>,
 })
 
-export const CollectionRecordType = createRecordType<TLCollection>('collection', {
-	validator: collectionValidator,
-	scope: 'document',
-}).withDefaultProperties(() => ({ meta: {} }))
-
 export const CollectionItemRecordType = createRecordType<TLCollectionItem>('collection-item', {
 	validator: collectionItemValidator,
 	scope: 'document',
 }).withDefaultProperties(() => ({ version: 1, meta: {} }))
-
-export const collectionMigrations = createRecordMigrationSequence({
-	sequenceId: 'com.tldraw.collection',
-	recordType: 'collection',
-	sequence: [],
-})
-
-export const collectionItemMigrations = createRecordMigrationSequence({
-	sequenceId: 'com.tldraw.collection-item',
-	recordType: 'collection-item',
-	sequence: [],
-})
 
 /** The newest item content format this version of the package can read. */
 export const CURRENT_ITEM_CONTENT_FORMAT_VERSION = 1

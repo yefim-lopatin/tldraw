@@ -1,5 +1,5 @@
 import { setInLocalStorage } from '@tldraw/editor'
-import type { TLCollection, TLCollectionId } from '../lib/schema'
+import type { TLCollection, TLCollectionId } from '@tldraw/tlschema'
 import { recordRecentCollection, sortByRecentlyAddedTo } from './recent-collections'
 
 const collection = (id: string) => ({ id: id as TLCollectionId, name: id }) as TLCollection

@@ -1,4 +1,5 @@
 import { computed, type Computed } from '@tldraw/state'
+import type { TLCollection, TLCollectionId, TLCollectionItemId } from '@tldraw/tlschema'
 import {
 	CollectionNotFoundError,
 	CollectionPermissionError,
@@ -10,7 +11,6 @@ import {
 	type TLNewCollectionOptions,
 } from './CollectionSource'
 import { copyCollection, copyItem } from './copyCollection'
-import type { TLCollection, TLCollectionId, TLCollectionItemId } from './schema'
 
 /** @public */
 export interface CompositeCollectionSourcePart {

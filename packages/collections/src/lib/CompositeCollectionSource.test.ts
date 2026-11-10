@@ -1,15 +1,11 @@
 import { react } from '@tldraw/state'
-import { createShapeId, createTLSchema } from '@tldraw/tlschema'
+import { CollectionRecordType, createShapeId, createTLSchema } from '@tldraw/tlschema'
 import { describe, expect, it, vi } from 'vitest'
 import { CollectionNotFoundError, CollectionPermissionError } from './CollectionSource'
 import { CompositeCollectionSource } from './CompositeCollectionSource'
 import { copyCollection } from './copyCollection'
 import { InMemoryCollectionSource } from './InMemoryCollectionSource'
-import {
-	CollectionItemRecordType,
-	CollectionRecordType,
-	type TLCollectionItemContent,
-} from './schema'
+import { CollectionItemRecordType, type TLCollectionItemContent } from './schema'
 
 function content(name: string): TLCollectionItemContent {
 	const id = createShapeId(name)

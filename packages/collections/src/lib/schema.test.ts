@@ -1,11 +1,9 @@
-import { createShapeId, createTLSchema } from '@tldraw/tlschema'
+import { CollectionRecordType, createShapeId, createTLSchema } from '@tldraw/tlschema'
 import { describe, expect, it } from 'vitest'
 import {
 	CollectionItemContentTooNewError,
 	CollectionItemRecordType,
 	collectionItemValidator,
-	CollectionRecordType,
-	collectionValidator,
 	getThumbnailForColorMode,
 	mapThumbnail,
 	parseCollectionItemContent,
@@ -26,37 +24,6 @@ function itemContent(overrides: Record<string, unknown> = {}) {
 		...overrides,
 	}
 }
-
-describe('collectionValidator', () => {
-	const collection = CollectionRecordType.create({
-		id: CollectionRecordType.createId('wireframes'),
-		name: 'Wireframes',
-	})
-
-	it('accepts a collection', () => {
-		expect(collectionValidator.validate(collection)).toEqual(collection)
-	})
-
-	it('rejects a blank name', () => {
-		expect(() => collectionValidator.validate({ ...collection, name: '  ' })).toThrow()
-	})
-
-	it('accepts an owner, but not a blank one', () => {
-		expect(collectionValidator.validate({ ...collection, ownerId: 'acme' })).toEqual({
-			...collection,
-			ownerId: 'acme',
-		})
-		expect(() => collectionValidator.validate({ ...collection, ownerId: ' ' })).toThrow()
-	})
-
-	it('rejects an id that is not a collection id', () => {
-		expect(() => collectionValidator.validate({ ...collection, id: 'wireframes' })).toThrow()
-	})
-
-	it('rejects unknown properties', () => {
-		expect(() => collectionValidator.validate({ ...collection, color: 'red' })).toThrow()
-	})
-})
 
 describe('collectionItemValidator', () => {
 	const item = CollectionItemRecordType.create({

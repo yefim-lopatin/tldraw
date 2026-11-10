@@ -1,5 +1,11 @@
 import type { Computed } from '@tldraw/state'
 import { Store, StoreSchema } from '@tldraw/store'
+import {
+	CollectionRecordType,
+	type TLCollection,
+	type TLCollectionId,
+	type TLCollectionItemId,
+} from '@tldraw/tlschema'
 import { structuredClone } from '@tldraw/utils'
 import {
 	CollectionNotFoundError,
@@ -13,18 +19,11 @@ import {
 } from './CollectionSource'
 import {
 	CollectionItemRecordType,
-	collectionItemMigrations,
 	collectionItemValidator,
-	collectionMigrations,
-	CollectionRecordType,
 	mapThumbnail,
 	parseCollectionItemContent,
-	type TLCollection,
-	type TLCollectionId,
 	type TLCollectionItem,
 	type TLCollectionItemContent,
-	type TLCollectionItemId,
-	type TLCollectionRecord,
 } from './schema'
 
 export interface InMemoryCollectionSourceOptions {
@@ -66,10 +65,12 @@ export interface InMemoryCollectionSourceOptions {
 	can?(action: TLCollectionAction, target?: TLCollectionTarget): boolean
 }
 
-const schema = StoreSchema.create<TLCollectionRecord>(
-	{ collection: CollectionRecordType, 'collection-item': CollectionItemRecordType },
-	{ migrations: [collectionMigrations, collectionItemMigrations] }
-)
+type ListedRecord = TLCollection | TLCollectionItem
+
+const schema = StoreSchema.create<ListedRecord>({
+	collection: CollectionRecordType,
+	'collection-item': CollectionItemRecordType,
+})
 
 /**
  * A source that keeps everything in memory. Used for tests, for building UI before a backend
@@ -84,7 +85,7 @@ export class InMemoryCollectionSource implements CollectionSource {
 	private readonly owners: TLCollectionOwner[]
 	private readonly defaultOwnerId: string | undefined
 	private readonly allows: (action: TLCollectionAction, target?: TLCollectionTarget) => boolean
-	private readonly store = new Store<TLCollectionRecord>({ schema, props: {} })
+	private readonly store = new Store<ListedRecord>({ schema, props: {} })
 	private readonly collections = this.store.query.records('collection')
 	private readonly itemsByCollection = new Map<TLCollectionId, Computed<TLCollectionItem[]>>()
 	private readonly contents = new Map<TLCollectionItemId, TLCollectionItemContent>()

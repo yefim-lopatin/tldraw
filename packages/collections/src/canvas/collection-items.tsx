@@ -1,7 +1,15 @@
 import { type ButtonHTMLAttributes, type MouseEvent, useCallback } from 'react'
-import { defineMessages, useDialogs, useEditor, useToasts, useTranslation, useValue } from 'tldraw'
+import {
+	defineMessages,
+	useDialogs,
+	useEditor,
+	useToasts,
+	useTranslation,
+	useValue,
+	type TLCollectionId,
+	type TLCollectionItemId,
+} from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
-import type { TLCollectionId, TLCollectionItemId } from '../lib/schema'
 import { ItemGrid, ItemGridItems, ItemGridTile } from '../ui/item-grid'
 import { getItemMenuId, ItemMenu } from '../ui/item-menu'
 import { AddSelectionTile } from './add-selection-tile'

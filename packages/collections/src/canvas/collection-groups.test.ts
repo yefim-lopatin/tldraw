@@ -1,4 +1,4 @@
-import type { TLCollection, TLCollectionId } from '../lib/schema'
+import type { TLCollection, TLCollectionId } from 'tldraw'
 import { getCollectionGrouping, groupCollectionList } from './collection-groups'
 
 const collection = (id: string, ownerId?: string) =>

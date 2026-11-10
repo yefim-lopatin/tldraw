@@ -1,12 +1,11 @@
-import type { JsonObject } from '@tldraw/utils'
 import type {
 	TLCollection,
 	TLCollectionId,
-	TLCollectionItem,
-	TLCollectionItemContent,
 	TLCollectionItemId,
 	TLCollectionThumbnail,
-} from './schema'
+} from '@tldraw/tlschema'
+import type { JsonObject } from '@tldraw/utils'
+import type { TLCollectionItem, TLCollectionItemContent } from './schema'
 
 /**
  * A change a user can try to make. Sources answer {@link CollectionSource.can}.

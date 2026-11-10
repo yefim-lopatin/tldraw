@@ -1,13 +1,9 @@
-import { createShapeId, createTLSchema } from '@tldraw/tlschema'
+import { CollectionRecordType, createShapeId, createTLSchema } from '@tldraw/tlschema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CollectionNotFoundError } from './CollectionSource'
 import { copyCollection } from './copyCollection'
 import { InMemoryCollectionSource } from './InMemoryCollectionSource'
-import {
-	CollectionItemRecordType,
-	CollectionRecordType,
-	type TLCollectionItemContent,
-} from './schema'
+import { CollectionItemRecordType, type TLCollectionItemContent } from './schema'
 
 const shapeId = createShapeId('box')
 const owners = [

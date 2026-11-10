@@ -6,10 +6,10 @@ import {
 	useToasts,
 	useTranslation,
 	useValue,
+	type TLCollection,
 } from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
 import { copyCollection } from '../lib/copyCollection'
-import type { TLCollection } from '../lib/schema'
 import { CollectionMenu, type CollectionMenuSort } from '../ui/collection-menu'
 import { RenameInput } from '../ui/rename-input'
 import { ConfirmDeleteDialog } from './confirm-delete-dialog'

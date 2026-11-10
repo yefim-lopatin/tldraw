@@ -1,6 +1,12 @@
-import { defineMessages, TldrawUiIcon, useEditor, useTranslation, useValue } from 'tldraw'
+import {
+	defineMessages,
+	TldrawUiIcon,
+	useEditor,
+	useTranslation,
+	useValue,
+	type TLCollectionId,
+} from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
-import type { TLCollectionId } from '../lib/schema'
 import type { PrepareItemContent } from './save-shapes'
 import { useSaveSelection } from './use-save-selection'
 

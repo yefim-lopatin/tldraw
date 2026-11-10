@@ -1,8 +1,8 @@
 import { getIncrementedName } from '@tldraw/editor'
+import type { TLCollection } from '@tldraw/tlschema'
 import type { CollectionPack } from './CollectionPack'
 import type { CollectionSource, TLNewCollectionOptions } from './CollectionSource'
 import { fetchThumbnail } from './copyCollection'
-import type { TLCollection } from './schema'
 
 /**
  * Copies a pack into a source as an ordinary collection the owner can change like any other, with

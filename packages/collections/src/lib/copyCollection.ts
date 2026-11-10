@@ -1,10 +1,6 @@
+import type { TLCollection, TLCollectionId, TLCollectionThumbnail } from '@tldraw/tlschema'
 import { CollectionNotFoundError, type CollectionSource } from './CollectionSource'
-import type {
-	TLCollection,
-	TLCollectionId,
-	TLCollectionItem,
-	TLCollectionThumbnail,
-} from './schema'
+import type { TLCollectionItem } from './schema'
 
 /**
  * Copies a collection and its items to an owner, as a new collection with the same name. The

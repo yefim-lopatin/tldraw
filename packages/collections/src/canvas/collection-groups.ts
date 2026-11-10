@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useValue } from 'tldraw'
+import type { TLCollection } from 'tldraw'
 import type { CollectionSource, TLCollectionOwner } from '../lib/CollectionSource'
-import type { TLCollection } from '../lib/schema'
 
 export interface CollectionGroup {
 	/** The owner's id. Collections without a known owner go in a group with none. */

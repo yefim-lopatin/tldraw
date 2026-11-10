@@ -15,6 +15,7 @@ import { MigrationSequence } from '@tldraw/store';
 import { RecordId } from '@tldraw/store';
 import { RecordScope } from '@tldraw/store';
 import { RecordType } from '@tldraw/store';
+import { SerializedSchema } from '@tldraw/store';
 import { SerializedStore } from '@tldraw/store';
 import { Signal } from '@tldraw/state';
 import { StandaloneDependsOn } from '@tldraw/store';
@@ -133,6 +134,50 @@ export const CameraRecordType: RecordType<TLCamera, never>;
 // @public
 export const canvasUiColorTypeValidator: T.Validator<"accent" | "black" | "laser" | "muted-1" | "selection-fill" | "selection-stroke" | "white">;
 
+// @internal (undocumented)
+export const CollectionItemContentRecordType: RecordType<TLCollectionItemContentRecord, "assetIds" | "content" | "itemId">;
+
+// @internal (undocumented)
+export const collectionItemContentValidator: T.Validator<TLCollectionItemContentRecord>;
+
+// @internal (undocumented)
+export const collectionItemRecordValidator: T.Validator<TLCollectionItemRecord>;
+
+// @internal (undocumented)
+export const CollectionRecordType: RecordType<TLCollection, "name" | "ownerId">;
+
+// @internal
+export const collectionSchemaRecords: {
+    'collection-item-content': {
+        createDefaultProperties: () => {
+            meta: {};
+        };
+        migrations: MigrationSequence;
+        scope: "document";
+        validator: T.Validator<TLCollectionItemContentRecord>;
+    };
+    'collection-item': {
+        createDefaultProperties: () => {
+            meta: {};
+            version: number;
+        };
+        migrations: MigrationSequence;
+        scope: "document";
+        validator: T.Validator<TLCollectionItemRecord>;
+    };
+    collection: {
+        createDefaultProperties: () => {
+            meta: {};
+        };
+        migrations: MigrationSequence;
+        scope: "document";
+        validator: T.Validator<TLCollection>;
+    };
+};
+
+// @internal (undocumented)
+export const collectionValidator: T.Validator<TLCollection>;
+
 // @public
 export const commentReactionRecordConfig: CustomRecordInfo;
 
@@ -201,6 +246,9 @@ export function createBindingValidator<Type extends string, Props extends JsonOb
 
 // @public
 export function createCachedUserResolve(resolveFn: (userId: string) => null | TLUser): (userId: string) => Signal<null | TLUser>;
+
+// @internal
+export function createCollectionItemContentId(itemId: TLCollectionItemId): TLCollectionItemContentRecordId;
 
 // @public
 export function createComment(props: {
@@ -1105,6 +1153,63 @@ export type TLCameraId = RecordId<TLCamera>;
 
 // @public
 export type TLCanvasUiColor = SetValue<typeof TL_CANVAS_UI_COLOR_TYPES>;
+
+// @internal
+export interface TLCollection extends BaseRecord<'collection', TLCollectionId> {
+    // (undocumented)
+    meta: JsonObject;
+    // (undocumented)
+    name: string;
+    ownerId?: string;
+}
+
+// @internal (undocumented)
+export type TLCollectionId = RecordId<TLCollection>;
+
+// @internal
+export interface TLCollectionItemContentRecord extends BaseRecord<'collection-item-content', TLCollectionItemContentRecordId> {
+    // (undocumented)
+    assetIds: TLAssetId[];
+    // (undocumented)
+    content: {
+        bindings?: TLBinding[];
+        rootShapeIds: TLShapeId[];
+        schema: SerializedSchema;
+        shapes: TLShape[];
+        users?: TLUser[];
+    };
+    // (undocumented)
+    itemId: TLCollectionItemId;
+    // (undocumented)
+    meta: JsonObject;
+}
+
+// @internal (undocumented)
+export type TLCollectionItemContentRecordId = RecordId<TLCollectionItemContentRecord>;
+
+// @internal (undocumented)
+export type TLCollectionItemId = RecordId<TLCollectionItemRecord>;
+
+// @internal
+export interface TLCollectionItemRecord extends BaseRecord<'collection-item', TLCollectionItemId> {
+    // (undocumented)
+    collectionId: TLCollectionId;
+    createdAt?: number;
+    // (undocumented)
+    meta: JsonObject;
+    name?: string;
+    thumbnail?: TLCollectionThumbnail<TLAssetId>;
+    version: number;
+}
+
+// @internal (undocumented)
+export type TLCollectionRecord = TLCollection | TLCollectionItemContentRecord | TLCollectionItemRecord;
+
+// @internal
+export type TLCollectionThumbnail<Src = string> = {
+    dark: Src;
+    light: Src;
+} | Src;
 
 // @public
 export interface TLComment extends BaseRecord<'comment', TLCommentId> {

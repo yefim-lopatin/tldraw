@@ -6,9 +6,9 @@ import {
 	useToasts,
 	useTranslation,
 	type Editor,
+	type TLCollectionId,
 } from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
-import type { TLCollectionId } from '../lib/schema'
 import { createNewCollection } from './new-collection'
 import { recordRecentCollection } from './recent-collections'
 import { saveShapesToCollection, type PrepareItemContent } from './save-shapes'

@@ -2,17 +2,14 @@ import {
 	Box,
 	Geometry2dFilters,
 	type Editor,
+	type TLCollectionId,
 	type TLContent,
 	type TLImageExportOptions,
 	type TLShape,
 	type TLShapeId,
 } from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
-import {
-	CURRENT_ITEM_CONTENT_FORMAT_VERSION,
-	type TLCollectionId,
-	type TLCollectionItem,
-} from '../lib/schema'
+import { CURRENT_ITEM_CONTENT_FORMAT_VERSION, type TLCollectionItem } from '../lib/schema'
 
 /**
  * Changes an item's content before it's saved, e.g. to wrap several shapes in a group or a frame

@@ -62,20 +62,18 @@ export {
 export {
 	CollectionItemContentTooNewError,
 	CollectionItemRecordType,
-	collectionItemMigrations,
-	collectionMigrations,
-	CollectionRecordType,
 	CURRENT_ITEM_CONTENT_FORMAT_VERSION,
 	collectionItemValidator,
-	collectionValidator,
 	getThumbnailForColorMode,
 	mapThumbnail,
 	parseCollectionItemContent,
-	type TLCollection,
-	type TLCollectionId,
 	type TLCollectionItem,
 	type TLCollectionItemContent,
-	type TLCollectionItemId,
-	type TLCollectionRecord,
-	type TLCollectionThumbnail,
 } from './lib/schema'
+export {
+	CollectionRecordType,
+	type TLCollection,
+	type TLCollectionId,
+	type TLCollectionItemId,
+	type TLCollectionThumbnail,
+} from '@tldraw/tlschema'

@@ -1,7 +1,6 @@
 import { type ButtonHTMLAttributes, useCallback, useEffect, useRef, useState } from 'react'
-import { useEditor, useValue } from 'tldraw'
+import { useEditor, useValue, type TLCollection, type TLCollectionItemId } from 'tldraw'
 import type { CollectionSource } from '../lib/CollectionSource'
-import type { TLCollection, TLCollectionItemId } from '../lib/schema'
 import { CollectionItems } from './collection-items'
 import { CollectionSectionHeader } from './collection-section-header'
 import { getItemOrderChoice, itemOrderings, setItemOrderChoice } from './item-order'

@@ -1,5 +1,5 @@
 import { react } from '@tldraw/state'
-import { createShapeId, createTLSchema } from '@tldraw/tlschema'
+import { CollectionRecordType, createShapeId, createTLSchema } from '@tldraw/tlschema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
 	CollectionNotFoundError,
@@ -8,11 +8,7 @@ import {
 	type TLCollectionTarget,
 } from './CollectionSource'
 import { InMemoryCollectionSource } from './InMemoryCollectionSource'
-import {
-	CollectionItemRecordType,
-	CollectionRecordType,
-	type TLCollectionItemContent,
-} from './schema'
+import { CollectionItemRecordType, type TLCollectionItemContent } from './schema'
 
 const shapeId = createShapeId('box')
 const pack = CollectionRecordType.createId('pack')

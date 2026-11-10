@@ -1,4 +1,5 @@
-import type { TLCollectionItemContent, TLCollectionThumbnail } from './schema'
+import type { TLCollectionThumbnail } from '@tldraw/tlschema'
+import type { TLCollectionItemContent } from './schema'
 
 /**
  * A set of items shipped as data, such as starter shapes bundled with an app. {@link copyPack}

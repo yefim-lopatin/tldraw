@@ -1,5 +1,4 @@
-import { EditorAtom, type Editor } from 'tldraw'
-import type { TLCollectionId } from '../lib/schema'
+import { EditorAtom, type Editor, type TLCollectionId } from 'tldraw'
 
 /**
  * Whether the collections panel is open. Scoped per editor, so two editors on one page don't share
