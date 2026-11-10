@@ -11,7 +11,8 @@ import {
 } from 'tldraw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fileSchemaRecords } from '../../../utils/fileSchemaRecords'
-import { createCollectionsSource } from './collectionsSource'
+import type { TldrawApp } from '../../app/TldrawApp'
+import { TldrawAppCollectionsSource } from './collectionsSource'
 import { getEditorCollections } from './editorCollections'
 
 let lastUserId = 0
@@ -37,13 +38,30 @@ function createEditor() {
 	return editor
 }
 
+// The home workspace's id is the user's id, as on tldraw.com.
+function createApp(userId: string) {
+	const names: Record<string, string> = { [userId]: 'Home', acme: 'Acme' }
+	return {
+		userId,
+		getHomeWorkspaceId: () => userId,
+		getWorkspaceMemberships: () =>
+			[userId, 'acme'].map((groupId) => ({ groupId, group: { name: names[groupId] } })),
+		msg: (message: { defaultMessage: string }) => message.defaultMessage,
+	} as unknown as TldrawApp
+}
+
+function createUserCollections(app: TldrawApp) {
+	const userCollections = new TldrawAppCollectionsSource(app)
+	cleanups.push(() => userCollections.dispose())
+	return userCollections
+}
+
 function setUp() {
 	const userId = `editor-collections-user-${++lastUserId}`
-	const app = { userId, msg: (message: { defaultMessage: string }) => message.defaultMessage }
-	const userCollections = createCollectionsSource(userId)
-	cleanups.push(() => userCollections.dispose())
+	const app = createApp(userId)
+	const userCollections = createUserCollections(app)
 	const editor = createEditor()
-	const source = getEditorCollections(app as any, userCollections, editor, 'file-a')
+	const source = getEditorCollections(app, userCollections, editor, 'file-a')
 	return { app, userId, userCollections, editor, source }
 }
 
@@ -79,25 +97,34 @@ function addImage(editor: Editor) {
 }
 
 describe('getEditorCollections', () => {
-	it("lists the board first, then the user's own collections", () => {
+	it("lists the board first, then the user's workspaces", () => {
 		const { userId, source } = setUp()
 		expect(source.getCollectionOwners?.()).toEqual([
 			{ id: 'file-a', name: 'This board' },
-			{ id: userId, name: 'Your collections' },
+			{ id: userId, name: 'Private to you' },
+			{ id: 'acme', name: 'Acme' },
 		])
 		expect(namesOf(source, userId)).toEqual(['Wireframes', 'Icons'])
 	})
 
 	it('is made once per editor and file', () => {
 		const { app, userCollections, editor, source } = setUp()
-		expect(getEditorCollections(app as any, userCollections, editor, 'file-a')).toBe(source)
-		expect(getEditorCollections(app as any, userCollections, editor, 'file-b')).not.toBe(source)
+		expect(getEditorCollections(app, userCollections, editor, 'file-a')).toBe(source)
+		expect(getEditorCollections(app, userCollections, editor, 'file-b')).not.toBe(source)
 	})
 
-	it("creates new collections among the user's own", async () => {
+	it("creates new collections in the user's home workspace", async () => {
 		const { userId, editor, source } = setUp()
+		expect(source.getDefaultOwnerId?.()).toBe(userId)
 		const collection = await source.createCollection('Team kit')
 		expect(collection.ownerId).toBe(userId)
+		expect(ofType(editor, 'collection')).toEqual([])
+	})
+
+	it("creates a collection in another of the user's workspaces when asked", async () => {
+		const { editor, source } = setUp()
+		const collection = await source.createCollection('Acme kit', { ownerId: 'acme' })
+		expect(collection.ownerId).toBe('acme')
 		expect(ofType(editor, 'collection')).toEqual([])
 	})
 
@@ -131,12 +158,11 @@ describe('getEditorCollections', () => {
 	})
 
 	it("keeps a board collection out of the user's own collections across a reload", async () => {
-		const { userId, source } = setUp()
+		const { app, source } = setUp()
 		await source.createCollection('Board kit', { ownerId: 'file-a' })
 		await source.createCollection('Team kit')
 
-		const reloaded = createCollectionsSource(userId)
-		cleanups.push(() => reloaded.dispose())
+		const reloaded = createUserCollections(app)
 		await vi.waitFor(() =>
 			expect(reloaded.getCollections().map((c) => c.name)).toEqual([
 				'Wireframes',

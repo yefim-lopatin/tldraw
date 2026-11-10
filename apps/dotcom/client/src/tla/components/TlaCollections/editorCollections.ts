@@ -8,20 +8,19 @@ import type { TldrawApp } from '../../app/TldrawApp'
 
 const messages = defineMessages({
 	thisBoard: { defaultMessage: 'This board' },
-	yourCollections: { defaultMessage: 'Your collections' },
 })
 
 const sources = new WeakMap<Editor, { fileId: string; source: CollectionSource }>()
 
 /**
  * The collections an open file's editor offers: the board's own, kept as records in the file's
- * document so they are saved, synced and duplicated with it, then the user's own collections. New
- * collections go to the user's own.
+ * document so they are saved, synced and duplicated with it, then the user's own collections under
+ * the workspaces they belong to. New collections go to the user's home workspace.
  *
  * Made once per editor, so the panel and the context menu share it.
  */
 export function getEditorCollections(
-	app: Pick<TldrawApp, 'userId' | 'msg'>,
+	app: Pick<TldrawApp, 'getHomeWorkspaceId' | 'msg'>,
 	userCollections: CollectionSource,
 	editor: Editor,
 	fileId: string
@@ -31,16 +30,13 @@ export function getEditorCollections(
 	const source = new CompositeCollectionSource({
 		// The user source's id, so choices the UI keeps per source carry over.
 		id: userCollections.id,
-		defaultOwnerId: app.userId,
+		defaultOwnerId: app.getHomeWorkspaceId(),
 		parts: [
 			{
 				owner: { id: fileId, name: app.msg(messages.thisBoard) },
 				source: new BoardCollectionSource(editor, { id: `board:${fileId}` }),
 			},
-			{
-				owner: { id: app.userId, name: app.msg(messages.yourCollections) },
-				source: userCollections,
-			},
+			{ source: userCollections },
 		],
 	})
 	sources.set(editor, { fileId, source })
